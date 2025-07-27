@@ -1,0 +1,112 @@
+{
+  "jnt_magazine1": {
+    "curve_offset_x": -0.5,
+    "curve_offset_y": 0.5,
+    "curve_offset_z": 6.38378239159465e-16,
+    "curve_rotation_x": 90.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "Custom",
+    "control_scale": 1.2,
+    "control_color": "red"
+  },
+  "jnt_magazine": {
+    "curve_offset_x": -1.5,
+    "curve_offset_y": 7.400000000000004,
+    "curve_offset_z": -1.5000000000000002,
+    "curve_rotation_x": 90.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "Custom",
+    "control_scale": 1.8000000000000007,
+    "control_color": "blue"
+  },
+  "jnt_bullet": {
+    "curve_offset_x": 0.0,
+    "curve_offset_y": 0.0,
+    "curve_offset_z": 0.0,
+    "curve_rotation_x": 0.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "box",
+    "control_scale": 1.0,
+    "control_color": "yellow"
+  },
+  "jnt_bullet_shell": {
+    "curve_offset_x": 0.0,
+    "curve_offset_y": 0.0,
+    "curve_offset_z": 0.0,
+    "curve_rotation_x": 0.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "box",
+    "control_scale": 1.0,
+    "control_color": "yellow"
+  },
+  "jnt_magazine_tab": {
+    "curve_offset_x": 0.0,
+    "curve_offset_y": 0.20000000000000004,
+    "curve_offset_z": 0.0,
+    "curve_rotation_x": 90.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": -5.0,
+    "control_shape": "box",
+    "control_scale": 0.8,
+    "control_color": "yellow"
+  },
+  "jnt_offset": {
+    "curve_offset_x": 5.0,
+    "curve_offset_y": -4.0,
+    "curve_offset_z": 0.0,
+    "curve_rotation_x": 90.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "box",
+    "control_scale": 0.9,
+    "control_color": "white"
+  },
+  "jnt_ring": {
+    "curve_offset_x": 0.0,
+    "curve_offset_y": -0.7999999999999999,
+    "curve_offset_z": -1.2,
+    "curve_rotation_x": 110.0,
+    "curve_rotation_y": 3.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "Custom",
+    "control_scale": 1.1,
+    "control_color": "yellow"
+  },
+  "jnt_selector_plate": {
+    "curve_offset_x": 0.0,
+    "curve_offset_y": 0.0,
+    "curve_offset_z": 0.0,
+    "curve_rotation_x": 0.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "box",
+    "control_scale": 0.6000000000000001,
+    "control_color": "red"
+  },
+  "jnt_shutter": {
+    "curve_offset_x": -3.3000000000000016,
+    "curve_offset_y": 0.4,
+    "curve_offset_z": 0.7999999999999999,
+    "curve_rotation_x": 0.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "box",
+    "control_scale": 0.30000000000000016,
+    "control_color": "yellow"
+  },
+  "jnt_trigger": {
+    "curve_offset_x": 0.0,
+    "curve_offset_y": 0.6,
+    "curve_offset_z": -0.30000000000000004,
+    "curve_rotation_x": 90.0,
+    "curve_rotation_y": 0.0,
+    "curve_rotation_z": 0.0,
+    "control_shape": "Custom",
+    "control_scale": 1.0,
+    "control_color": "yellow"
+  }
+}

@@ -1,0 +1,13 @@
+jnt_bullet
+jnt_bullet_shell
+jnt_l_hand
+jnt_magazine
+jnt_magazine1
+jnt_magazine_tab
+jnt_offset
+jnt_r_hand
+jnt_ring
+jnt_selector_plate
+jnt_shutter
+jnt_trigger
+jnt_wpn_ak74
