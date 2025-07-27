@@ -1,0 +1,350 @@
+// STALKER 2 Toolkit - Drag & Drop Installer
+// Drag this file into Maya's viewport to install the toolkit automatically
+//
+// This MEL script will:
+// 1. Auto-detect the toolkit location
+// 2. Copy files to Maya's scripts directory
+// 3. Set up Python paths
+// 4. Install the shelf button
+// 5. Show confirmation
+
+global proc install_stalker2_toolkit_drag_drop()
+{
+    print("=== STALKER 2 Toolkit Drag & Drop Installer ===\n");
+    
+    // Get the directory where this MEL script is located
+    string $scriptPath = `whatIs "install_stalker2_toolkit_drag_drop"`;
+    
+    // Parse the actual file path from the whatIs result
+    // whatIs returns "Mel procedure found in: [actual_path]"
+    string $actualPath = "";
+    if (startsWith($scriptPath, "Mel procedure found in: ")) {
+        $actualPath = substring($scriptPath, 25, size($scriptPath));  // Remove "Mel procedure found in: "
+    } else {
+        $actualPath = $scriptPath;
+    }
+    
+    string $scriptDir = dirname($actualPath);
+    
+    // Verify the directory exists and contains our scripts
+    string $testFile = $scriptDir + "/INSTALL_STALKER2_TOOLKIT.mel";
+    if (!`filetest -f $testFile`) {
+        print("WARNING: Script file not found at expected location: " + $testFile + "\n");
+        
+        // Try current working directory as fallback
+        string $currentDir = `pwd`;
+        string $testPath = $currentDir + "/INSTALL_STALKER2_TOOLKIT.mel";
+        if (`filetest -f $testPath`) {
+            $scriptDir = $currentDir;
+            print("Using current working directory instead: " + $scriptDir + "\n");
+        }
+    }
+    
+    print("Installer location: " + $scriptDir + "\n");
+    
+    // Check if current directory contains STALKER 2 Toolkit structure
+    string $requiredFiles[] = {"stalker2_toolkit.py", "material_texture_matcher.py", "weapon_importer.py", "weapon_rig_tool.py", "README_STALKER2_TOOLKIT.md"};
+    
+    int $foundFiles = 0;
+    
+    // Check for required files
+    for ($file in $requiredFiles) {
+        string $filePath = $scriptDir + "/" + $file;
+        if (`filetest -f $filePath`) {
+            $foundFiles++;
+        }
+    }
+    
+    // Check for custom icon
+    string $iconPath = $scriptDir + "/STAT_Icon.png";
+    int $hasCustomIcon = `filetest -f $iconPath`;
+    
+    // Verify we have the required structure
+    if ($foundFiles < 2) {  // At least toolkit and matcher required
+        string $errorMsg = "STALKER 2 Toolkit structure not found!\n\n";
+        $errorMsg += "Current location: " + $scriptDir + "\n\n";
+        $errorMsg += "Found " + $foundFiles + "/" + size($requiredFiles) + " required files\n\n";
+        $errorMsg += "Please ensure this script is in the STALKER 2 Toolkit Scripts directory.";
+        
+        confirmDialog -title "STALKER 2 Toolkit Installer" -message $errorMsg -button "OK";
+        return;
+    }
+    
+    // Use current directory as the toolkit source
+    string $toolkitSource = $scriptDir;
+    print("Validated STALKER 2 Toolkit structure (" + $foundFiles + "/" + size($requiredFiles) + " files)\n");
+    print("Using STALKER 2 Toolkit directory: " + $toolkitSource + "\n");
+    
+    // Get Maya user directory and version
+    string $mayaAppDir = `getenv MAYA_APP_DIR`;
+    if ($mayaAppDir == "") {
+        string $userDir = `getenv USERPROFILE`;  // Windows
+        if ($userDir == "") {
+            $userDir = `getenv HOME`;  // macOS/Linux
+        }
+        $mayaAppDir = $userDir + "/maya";
+    }
+    
+    string $mayaVersion = `about -version`;
+    string $versionParts[] = `stringToStringArray $mayaVersion " "`;
+    string $majorVersion = $versionParts[0];
+    
+    string $scriptsDir = $mayaAppDir + "/" + $majorVersion + "/scripts";
+    string $toolkitTarget = $scriptsDir + "/STALKER2_Toolkit";
+    
+    print("Maya version: " + $mayaVersion + "\n");
+    print("Scripts directory: " + $scriptsDir + "\n");
+    print("Target location: " + $toolkitTarget + "\n");
+    
+    // Create scripts directory if it doesn't exist
+    if (!`filetest -d $scriptsDir`) {
+        sysFile -makeDir $scriptsDir;
+        print("Created scripts directory: " + $scriptsDir + "\n");
+    }
+    
+    // Check if already installed
+    int $overwrite = 1;
+    if (`filetest -d $toolkitTarget`) {
+        string $response = `confirmDialog -title "STALKER 2 Toolkit Installer" -message "STALKER 2 Toolkit is already installed.\n\nOverwrite existing installation?" -button "Yes" -button "No" -defaultButton "Yes" -cancelButton "No" -dismissString "No"`;
+        
+        if ($response == "No") {
+            print("Installation cancelled by user.\n");
+            return;
+        }
+        
+        // Remove existing installation
+        python("import shutil; shutil.rmtree(r'" + $toolkitTarget + "')");
+        print("Removed existing installation.\n");
+    }
+    
+    // Remove existing shelf button
+    print("Removing existing shelf button...\n");
+    python("try:\n" +
+           "    import maya.cmds as cmds\n" +
+           "    import maya.mel as mel\n" +
+           "    current_shelf = cmds.tabLayout(mel.eval('$gShelfTopLevel=$gShelfTopLevel'), query=True, selectTab=True)\n" +
+           "    shelf_buttons = cmds.shelfLayout(current_shelf, query=True, childArray=True) or []\n" +
+           "    removed_buttons = []\n" +
+           "    for button in shelf_buttons:\n" +
+           "        # Get button label and annotation to identify STALKER2 buttons\n" +
+           "        try:\n" +
+           "            label = cmds.shelfButton(button, query=True, label=True)\n" +
+           "            annotation = cmds.shelfButton(button, query=True, annotation=True)\n" +
+           "            if ('STALKER2' in label) or ('STALKER' in annotation) or button.startswith('STALKER2'):\n" +
+           "                cmds.deleteUI(button)\n" +
+           "                removed_buttons.append(button)\n" +
+           "        except:\n" +
+           "            # Button might not be a shelf button, skip\n" +
+           "            pass\n" +
+           "    if removed_buttons:\n" +
+           "        print('Removed existing shelf buttons: ' + ', '.join(removed_buttons))\n" +
+           "    else:\n" +
+           "        print('No existing STALKER2 shelf buttons found')\n" +
+           "except Exception as e:\n" +
+           "    print('Note: Could not check for existing shelf buttons: ' + str(e))");
+    
+    // Copy STALKER 2 Toolkit folder
+    print("Copying STALKER 2 Toolkit to Maya scripts directory...\n");
+    python("import shutil; shutil.copytree(r'" + $toolkitSource + "', r'" + $toolkitTarget + "')");
+    
+    // Verify copy was successful
+    if (!`filetest -d $toolkitTarget`) {
+        confirmDialog -title "STALKER 2 Toolkit Installer" -message ("Installation failed!\n\nCould not copy files to:\n" + $toolkitTarget) -button "OK";
+        return;
+    }
+    
+    print("Successfully copied STALKER 2 Toolkit to: " + $toolkitTarget + "\n");
+    
+    // Copy custom icon if available
+    string $iconImage = "pythonFamily.png";  // Default fallback
+    if ($hasCustomIcon) {
+        // Get Maya's icons directory
+        string $iconsDir = $mayaAppDir + "/" + $majorVersion + "/prefs/icons";
+        if (!`filetest -d $iconsDir`) {
+            sysFile -makeDir $iconsDir;
+            print("Created icons directory: " + $iconsDir + "\n");
+        }
+        
+        string $targetIconPath = $iconsDir + "/STALKER2_Icon.png";
+        python("import shutil; shutil.copy2(r'" + $iconPath + "', r'" + $targetIconPath + "')");
+        
+        if (`filetest -f $targetIconPath`) {
+            $iconImage = "STALKER2_Icon.png";
+            print("Copied custom icon to: " + $targetIconPath + "\n");
+        } else {
+            print("Warning: Failed to copy custom icon, using default\n");
+        }
+    } else {
+        print("No custom icon found, using default Python icon\n");
+    }
+    
+    // Set up Python path
+    python("import sys");
+    python("scripts_path = r'" + $scriptsDir + "'");
+    python("toolkit_path = r'" + $toolkitTarget + "'");
+    python("if scripts_path not in sys.path: sys.path.insert(0, scripts_path)");
+    python("if toolkit_path not in sys.path: sys.path.insert(0, toolkit_path)");
+    print("Added to Python path: " + $scriptsDir + "\n");
+    print("Added to Python path: " + $toolkitTarget + "\n");
+    
+    // Test import with comprehensive error handling
+    python("import sys");
+    python("try:\n" +
+           "    # Clean reload any existing modules\n" +
+           "    modules_to_reload = ['stalker2_toolkit', 'material_texture_matcher', 'weapon_importer', 'weapon_rig_tool']\n" +
+           "    for mod_name in modules_to_reload:\n" +
+           "        if mod_name in sys.modules:\n" +
+           "            if hasattr(__builtins__, 'reload'):\n" +  // Python 2
+           "                reload(sys.modules[mod_name])\n" +
+           "            else:\n" +  // Python 3
+           "                import importlib; importlib.reload(sys.modules[mod_name])\n" +
+           "    \n" +
+           "    import stalker2_toolkit\n" +
+           "    import_success = True\n" +
+           "    import_error = ''\n" +
+           "except Exception as e:\n" +
+           "    import_success = False\n" +
+           "    import_error = str(e)");
+    
+    // Check import result
+    int $importOk = `python("import_success")`;
+    if (!$importOk) {
+        string $importErr = `python("import_error")`;
+        confirmDialog -title "STALKER 2 Toolkit - Import Error" 
+                     -message ("Failed to import STALKER 2 Toolkit:\n\n" + $importErr + "\n\nInstallation completed but toolkit may not work properly.\nTry restarting Maya.") 
+                     -button "OK";
+        return;
+    }
+    
+    print("[OK] STALKER 2 Toolkit imported successfully\n");
+    
+    // Create shelf button using crash-resistant approach
+    python("try:\n" +
+           "    import maya.cmds as cmds\n" +
+           "    import maya.mel as mel\n" +
+           "    \n" +
+           "    # Get current shelf\n" +
+           "    current_shelf = cmds.tabLayout(mel.eval('$gShelfTopLevel=$gShelfTopLevel'), query=True, selectTab=True)\n" +
+           "    \n" +
+           "    # Create simple and reliable command to run the toolkit\n" +
+           "    command = 'import stalker2_toolkit; stalker2_toolkit.safe_launch_stalker2_toolkit()'\n" +
+           "    \n" +
+           "    # Create the shelf button\n" +
+           "    button = cmds.shelfButton(\n" +
+           "        parent=current_shelf,\n" +
+           "        label='STALKER2',\n" +
+           "        annotation='Open STALKER 2 Toolkit - Modding tools for Maya',\n" +
+           "        image='" + $iconImage + "',\n" +
+           "        command=command,\n" +
+           "        sourceType='python',\n" +
+           "        style='iconOnly'\n" +
+           "    )\n" +
+           "    \n" +
+           "    shelf_success = True\n" +
+           "    shelf_error = ''\n" +
+           "    shelf_button_name = button\n" +
+           "except Exception as e:\n" +
+           "    shelf_success = False\n" +
+           "    shelf_error = str(e)\n" +
+           "    shelf_button_name = ''");
+    
+    // Check shelf installation result
+    int $shelfOk = `python("shelf_success")`;
+    if (!$shelfOk) {
+        string $shelfErr = `python("shelf_error")`;
+        confirmDialog -title "STALKER 2 Toolkit - Shelf Error" 
+                     -message ("Failed to create shelf button:\n\n" + $shelfErr + "\n\nSTALKER 2 Toolkit is installed but the shelf button could not be created.\nYou can manually run:\nimport stalker2_toolkit; stalker2_toolkit.show_stalker2_toolkit()") 
+                     -button "OK";
+        // Don't return here - installation is still successful
+    } else {
+        string $buttonName = `python("shelf_button_name")`;
+        print("[OK] STALKER 2 Toolkit shelf button created: " + $buttonName + "\n");
+    }
+    
+    print("\n");
+    print("=== Installation Complete ===\n");
+    print("STALKER 2 Toolkit installation completed successfully!\n");
+    print("[OK] Files copied to: " + $toolkitTarget + "\n");
+    print("[OK] Python path configured\n");
+    print("[OK] Toolkit imported successfully\n");
+    if ($hasCustomIcon) {
+        print("[OK] Custom STALKER 2 icon installed\n");
+    }
+    if ($shelfOk) {
+        print("[OK] STALKER 2 Toolkit shelf button created\n");
+        if ($hasCustomIcon) {
+            print("[OK] Shelf button using custom STALKER 2 icon\n");
+        }
+    } else {
+        print("[INFO] Manual launch option available if shelf button fails\n");
+    }
+    print("\n");
+    print("=== HOW TO USE ===\n");
+    if ($shelfOk) {
+        print("Click the 'STALKER2' button on the shelf to access the toolkit\n");
+    } else {
+        print("Since shelf button creation failed, use this manual command:\n");
+        print("In Script Editor (Python): import stalker2_toolkit; stalker2_toolkit.show_stalker2_toolkit()\n");
+    }
+    print("\n");
+    print("Available tools:\n");
+    print("- Material-Texture Matcher - Automatically assign textures to materials\n");
+    print("- Weapon Importer - Import weapon skeletons and constrain meshes to joints\n");
+    print("- Future modding tools (coming soon)\n");
+    print("\n");
+    print("=== TECHNICAL NOTES ===\n");
+    print("- Cross-Maya version compatibility (2025+ and earlier)\n");
+    print("- Dark mode UI consistent with modern workflows\n");
+    print("- Strict name matching to prevent incorrect assignments\n");
+    print("- Module auto-reload for development workflow\n");
+    print("\n");
+    print("=== TROUBLESHOOTING ===\n");
+    print("If you encounter issues:\n");
+    print("1. Check Script Editor for detailed error messages\n");
+    print("2. Try the manual launch command above\n");
+    print("3. Reinstall using this drag & drop installer\n");
+    print("4. Restart Maya if issues persist\n");
+    print("\n");
+    
+    // Show final success dialog with instructions
+    string $finalMessage = "STALKER 2 Toolkit installed successfully!\n\n";
+    $finalMessage += "FILES: Copied to " + $toolkitTarget + "\n\n";
+    
+    if ($shelfOk) {
+        $finalMessage += "USAGE: Click 'STALKER2' button on shelf";
+        if ($hasCustomIcon) {
+            $finalMessage += " (with custom icon)";
+        }
+        $finalMessage += "\n\n";
+    } else {
+        $finalMessage += "USAGE: In Script Editor (Python), run:\n";
+        $finalMessage += "import stalker2_toolkit; stalker2_toolkit.show_stalker2_toolkit()\n\n";
+    }
+    
+    $finalMessage += "AVAILABLE TOOLS:\n";
+    $finalMessage += "- Material-Texture Matcher\n";
+    $finalMessage += "  * Automatically assign textures to materials\n";
+    $finalMessage += "  * Supports MI_ materials and T_ textures\n";
+    $finalMessage += "  * Strict matching prevents errors\n";
+    $finalMessage += "- Weapon Importer\n";
+    $finalMessage += "  * Import weapon skeletons and meshes\n";
+    $finalMessage += "  * Automatic joint constraint setup\n";
+    $finalMessage += "  * Supports all weapon categories\n\n";
+    
+    $finalMessage += "FUTURE TOOLS:\n";
+    $finalMessage += "- UV Tools - UV mapping utilities\n";
+    $finalMessage += "- Mesh Utilities - Processing tools\n";
+    $finalMessage += "- Animation Tools - Import/export helpers\n\n";
+    
+    $finalMessage += "Need help? Check Script Editor for detailed messages.";
+    
+    // Show final dialog and optionally launch toolkit
+    string $launchChoice = `confirmDialog -title "STALKER 2 Toolkit - Installation Complete!" -message $finalMessage -button "Launch Toolkit" -button "Close" -defaultButton "Launch Toolkit"`;
+    if ($launchChoice == "Launch Toolkit") {
+        // Launch the toolkit using the safe launcher
+        python("import stalker2_toolkit; stalker2_toolkit.safe_launch_stalker2_toolkit()");
+    }
+}
+
+// Run the installer when this script is sourced
+install_stalker2_toolkit_drag_drop; 

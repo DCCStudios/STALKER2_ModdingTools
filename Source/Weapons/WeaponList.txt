@@ -1,0 +1,57 @@
+Melee - folder “knifes”
+* Knife - knife
+
+Pistols – folder “pt”
+* PTM - pm
+* UDP Compact - udp
+* APSB - apb
+* Rhino – rhino00000
+* Kora-1911 - kora 
+
+Shotguns – folder “shg”
+* Boomstick - obrez
+* TOZ-34 – toz34
+* M680 Cracker – m86000
+* SPSA-14 – spsa00
+* Saiga D-12 – d1200
+* RAM-2 – ram2
+
+Submachine Guns – folder “smg”
+* Viper-5 - vip
+* AKM-74U- aku
+* M10 Gordon – m1000
+* Buket S-2 – bucket0
+* ZUBR-19 – zubr0
+* Integral-A - integ
+
+Assault Rifles – folder “ar”
+* AKM-74/S – ak74
+* Fora-221 – fora0
+* Dnipro - dnipro
+* GROM S-14 – grim0
+* AS Lavina - lav
+* AR416 – m160
+* GP37 – gp37
+* Kharod – kharod000
+* Sotnyk - sotnyk
+
+Sniper Rifles – folder “sr”
+* SVU MK S-3 - svu
+* SVDM-2 - svm
+* VS Vintar - vintar
+* M701 Super – m701
+* Mark 1 EMR - mar
+* Three-Line Rifle - threeline
+* Gauss Rifle - gauss
+
+Machine Guns – folder “mg”
+* RPM-74 – pkp00000
+* PKP - mgp
+Launchers – folder “gl”
+* RPG7U – rpg7
+ Grenades – folder “grenades”
+* F1 Grenade – f1
+* RGD5 Grenade – rgd5
+* Smoke Grenade - smoke
+
+
