@@ -119,11 +119,11 @@ STALKER2_ModdingTools/
 ### Character Animation Workflow
 1. Reference `Rig/S2_Rig.mb` into new scene
 2. Load Advanced Skeleton picker tool
-3. Import character meshes and bind to rig
+3. Import character meshes (if needed, there is a default one provided) and any weapon rigs you are using, constrain the weapon root control curve to jnt_r_weapon
 4. Animate using picker controls
 5. Select the jnt_root bone and then in the toolbar, go to Select--> Hierarchy to select the entire bone chain
 6. Make sure the "ExportLayer" Anim layer is enabled, it will correct the rotation of the hips so that the animation works in-engine
-7. Export animation data using the Maya Game Exporter (there will be a custom exporter added soon that is much nicer)
+7. Export animation data using the Maya Game Exporter (there will be a custom exporter added soon that is much nicer), repeat this for the weapon skeleton
 
 ### Weapon Modding Workflow
 1. Use Weapon Importer to import weapon skeleton and meshes
