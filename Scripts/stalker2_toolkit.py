@@ -9,6 +9,9 @@ A comprehensive toolkit for S.T.A.L.K.E.R. 2 modding workflows in Maya.
 
 import os
 import sys
+import importlib
+
+# No subfolder - all files in main directory
 
 # Maya imports
 import maya.cmds as cmds
@@ -200,11 +203,19 @@ class STALKER2ToolkitDialog(QDialog):
         ])
         scroll_layout.addWidget(weapon_section)
         
+        # Animation Tools Section
+        animation_section = self.create_section("Animation Tools", [
+            ("Animation Importer", "Import game animations and apply reference\nposes with Advanced Skeleton integration", self.launch_animation_importer),
+            ("Animation Exporter", "Export animations with game-ready settings\nand automatic presets for S.T.A.L.K.E.R. 2", self.launch_animation_exporter),
+            ("Print Skeleton Hierarchy", "Generate reference pose data files\nused by the Animation Importer", self.launch_print_skeleton_hierarchy),
+        ])
+        scroll_layout.addWidget(animation_section)
+        
         # Placeholder for future tools
         future_section = self.create_section("Coming Soon", [
             ("UV Tools", "UV mapping and optimization utilities\n(Coming in next update)", None),
             ("Mesh Utilities", "Mesh processing and validation tools\n(Coming in next update)", None),
-            ("Animation Tools", "Animation import/export helpers\n(Coming in next update)", None),
+            ("Additional Animation Tools", "More animation helpers\n(Coming in next update)", None),
         ])
         scroll_layout.addWidget(future_section)
         
@@ -295,113 +306,152 @@ class STALKER2ToolkitDialog(QDialog):
     def launch_material_texture_matcher(self):
         """Launch the Material-Texture Matcher tool"""
         try:
-            # Import and run the material texture matcher
+            # Use the main directory path
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            matcher_script = os.path.join(script_dir, "material_texture_matcher.py")
             
-            if os.path.exists(matcher_script):
-                # Execute the script in the current namespace
+            # Make sure script directory is in path
+            if script_dir not in sys.path:
+                sys.path.insert(0, script_dir)
+            
+            # Import the module
+            try:
+                # Try direct import first
+                import material_texture_matcher
+                # Reload to ensure we have the latest version
+                importlib.reload(material_texture_matcher)
+            except ImportError:
+                # Fall back to manual script execution
+                matcher_script = os.path.join(script_dir, "material_texture_matcher.py")
+                
+                if not os.path.exists(matcher_script):
+                    QMessageBox.warning(self, "Error", f"Material-Texture Matcher script not found.\nExpected location: {matcher_script}")
+                    return
+                    
+                # Execute the script in a clean namespace
                 with open(matcher_script, 'r') as f:
                     script_content = f.read()
                 
-                # Create a clean namespace for execution
                 namespace = {
                     '__name__': 'material_texture_matcher',
                     '__file__': matcher_script,
-                    'cmds': cmds,  # Add cmds to namespace
-                    'sys': sys,    # Add sys to namespace
-                    'os': os       # Add os to namespace
+                    'cmds': cmds,
+                    'sys': sys,
+                    'os': os
                 }
                 
-                # Execute the script
                 exec(compile(script_content, matcher_script, 'exec'), namespace)
-                
-                # Call the main function
-                if 'show_material_texture_matcher' in namespace:
-                    namespace['show_material_texture_matcher']()
-                    # Close the main toolkit UI after launching the tool
-                    self.close()
-                else:
-                    QMessageBox.warning(self, "Error", "Could not find the main function in the Material-Texture Matcher script.")
+                material_texture_matcher = type('', (), namespace)()
+            
+            # Call the main function
+            if hasattr(material_texture_matcher, 'show_material_texture_matcher'):
+                material_texture_matcher.show_material_texture_matcher()
+                # Close the main toolkit UI after launching the tool
+                self.close()
             else:
-                QMessageBox.warning(self, "Error", "Material-Texture Matcher script not found.\nExpected location: " + matcher_script)
+                QMessageBox.warning(self, "Error", "Could not find the main function in the Material-Texture Matcher script.")
                 
         except Exception as e:
-            QMessageBox.critical(self, "Error", "Failed to launch Material-Texture Matcher:\n" + str(e))
+            QMessageBox.critical(self, "Error", f"Failed to launch Material-Texture Matcher:\n{str(e)}")
     
     def launch_weapon_importer(self):
         """Launch the Weapon Importer tool"""
         try:
-            # Import and run the weapon importer
+            # Use the main directory path
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            importer_script = os.path.join(script_dir, "weapon_importer.py")
             
-            if os.path.exists(importer_script):
-                # Execute the script in the current namespace
+            # Make sure script directory is in path
+            if script_dir not in sys.path:
+                sys.path.insert(0, script_dir)
+            
+            # Import the module
+            try:
+                # Try direct import first
+                import weapon_importer
+                # Reload to ensure we have the latest version
+                importlib.reload(weapon_importer)
+            except ImportError:
+                # Fall back to manual script execution
+                importer_script = os.path.join(script_dir, "weapon_importer.py")
+                
+                if not os.path.exists(importer_script):
+                    QMessageBox.warning(self, "Error", f"Weapon Importer script not found.\nExpected location: {importer_script}")
+                    return
+                    
+                # Execute the script in a clean namespace
                 with open(importer_script, 'r') as f:
                     script_content = f.read()
                 
-                # Create a clean namespace for execution
                 namespace = {
                     '__name__': 'weapon_importer',
                     '__file__': importer_script,
-                    'cmds': cmds,  # Add cmds to namespace
-                    'sys': sys,    # Add sys to namespace
-                    'os': os       # Add os to namespace
+                    'cmds': cmds,
+                    'sys': sys,
+                    'os': os
                 }
                 
-                # Execute the script
                 exec(compile(script_content, importer_script, 'exec'), namespace)
-                
-                # Call the main function
-                if 'show_weapon_importer' in namespace:
-                    namespace['show_weapon_importer']()
-                    # Close the main toolkit UI after launching the tool
-                    self.close()
-                else:
-                    QMessageBox.warning(self, "Error", "Could not find the main function in the Weapon Importer script.")
+                weapon_importer = type('', (), namespace)()
+            
+            # Call the main function
+            if hasattr(weapon_importer, 'show_weapon_importer'):
+                weapon_importer.show_weapon_importer()
+                # Close the main toolkit UI after launching the tool
+                self.close()
             else:
-                QMessageBox.warning(self, "Error", "Weapon Importer script not found.\nExpected location: " + importer_script)
+                QMessageBox.warning(self, "Error", "Could not find the main function in the Weapon Importer script.")
                 
         except Exception as e:
-            QMessageBox.critical(self, "Error", "Failed to launch Weapon Importer:\n" + str(e))
+            QMessageBox.critical(self, "Error", f"Failed to launch Weapon Importer:\n{str(e)}")
     
     def launch_weapon_rig_tool(self):
         """Launch the Weapon Rig Tool"""
         try:
-            # Import and run the weapon rig tool
+            # Use the main directory path
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            rig_tool_script = os.path.join(script_dir, "weapon_rig_tool.py")
             
-            if os.path.exists(rig_tool_script):
-                # Execute the script in the current namespace
+            # Make sure script directory is in path
+            if script_dir not in sys.path:
+                sys.path.insert(0, script_dir)
+            
+            # Import the module
+            try:
+                # Try direct import first
+                import weapon_rig_tool
+                # Reload to ensure we have the latest version
+                importlib.reload(weapon_rig_tool)
+            except ImportError:
+                # Fall back to manual script execution
+                rig_tool_script = os.path.join(script_dir, "weapon_rig_tool.py")
+                
+                if not os.path.exists(rig_tool_script):
+                    QMessageBox.warning(self, "Error", f"Weapon Rig Tool script not found.\nExpected location: {rig_tool_script}")
+                    return
+                    
+                # Execute the script in a clean namespace
                 with open(rig_tool_script, 'r') as f:
                     script_content = f.read()
                 
-                # Create a clean namespace for execution
                 namespace = {
                     '__name__': 'weapon_rig_tool',
                     '__file__': rig_tool_script,
-                    'cmds': cmds,  # Add cmds to namespace
-                    'sys': sys,    # Add sys to namespace
-                    'os': os       # Add os to namespace
+                    'cmds': cmds,
+                    'sys': sys,
+                    'os': os
                 }
                 
-                # Execute the script
                 exec(compile(script_content, rig_tool_script, 'exec'), namespace)
-                
-                # Call the main function
-                if 'show_weapon_rig_tool' in namespace:
-                    namespace['show_weapon_rig_tool']()
-                    # Close the main toolkit UI after launching the tool
-                    self.close()
-                else:
-                    QMessageBox.warning(self, "Error", "Could not find the main function in the Weapon Rig Tool script.")
+                weapon_rig_tool = type('', (), namespace)()
+            
+            # Call the main function
+            if hasattr(weapon_rig_tool, 'show_weapon_rig_tool'):
+                weapon_rig_tool.show_weapon_rig_tool()
+                # Close the main toolkit UI after launching the tool
+                self.close()
             else:
-                QMessageBox.warning(self, "Error", "Weapon Rig Tool script not found.\nExpected location: " + rig_tool_script)
+                QMessageBox.warning(self, "Error", "Could not find the main function in the Weapon Rig Tool script.")
                 
         except Exception as e:
-            QMessageBox.critical(self, "Error", "Failed to launch Weapon Rig Tool:\n" + str(e))
+            QMessageBox.critical(self, "Error", f"Failed to launch Weapon Rig Tool:\n{str(e)}")
     
     def uninstall_toolkit(self):
         """Uninstall the S.T.A.L.K.E.R. 2 Toolkit"""
@@ -547,6 +597,180 @@ class STALKER2ToolkitDialog(QDialog):
                     "Failed to uninstall S.T.A.L.K.E.R. 2 Toolkit:\n\n" + str(e)
                 )
 
+    def launch_animation_importer(self):
+        """Launch the Animation Importer tool"""
+        try:
+            # Use the main directory path
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Make sure script directory is in path
+            if script_dir not in sys.path:
+                sys.path.insert(0, script_dir)
+            
+            # Import the module
+            try:
+                # Try direct import first
+                import asAnimationImporter
+                # Reload to ensure we have the latest version
+                importlib.reload(asAnimationImporter)
+            except ImportError:
+                # Fall back to manual script execution
+                anim_importer_script = os.path.join(script_dir, "asAnimationImporter.py")
+                
+                if not os.path.exists(anim_importer_script):
+                    QMessageBox.warning(self, "Error", f"Animation Importer script not found.\nExpected location: {anim_importer_script}")
+                    return
+                    
+                # Execute the script in a clean namespace
+                with open(anim_importer_script, 'r') as f:
+                    script_content = f.read()
+                
+                namespace = {
+                    '__name__': 'asAnimationImporter',
+                    '__file__': anim_importer_script,
+                    'cmds': cmds,
+                    'sys': sys,
+                    'os': os
+                }
+                
+                exec(compile(script_content, anim_importer_script, 'exec'), namespace)
+                asAnimationImporter = type('', (), namespace)()
+            
+            # Call the main function
+            if hasattr(asAnimationImporter, 'animation_importer_ui'):
+                # Use dark style consistent with the toolkit
+                asAnimationImporter.asAnimationImporter(use_dark_style=True)
+                # Close the main toolkit UI after launching the tool
+                self.close()
+            else:
+                QMessageBox.warning(self, "Error", "Could not find the main function in the Animation Importer script.")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch Animation Importer:\n{str(e)}")
+    
+    def launch_animation_exporter(self):
+        """Launch the Animation Exporter tool"""
+        try:
+            # Use the provided code to launch the Animation Exporter
+            import traceback
+            
+            # The following code is from the provided snippet
+            try:
+                # Get Maya script path
+                script_path = cmds.internalVar(userScriptDir=True)
+                script_file = os.path.join(script_path, "HaxGameExporter.py")
+                
+                # Check if the file exists
+                if not os.path.exists(script_file):
+                    QMessageBox.warning(self, "Error", f"HaxGameExporter.py not found at: {script_file}\n\n"
+                                       "Please ensure the Animation Exporter is installed.\n"
+                                       "You can install it from the STALKER2_Toolkit installer.")
+                    return
+                
+                # Define helper functions for Python 2/3 compatibility
+                def is_py2():
+                    return sys.version_info[0] == 2
+
+                def execfile_compat(filename, globals_=None, locals_=None):
+                    if is_py2():
+                        execfile(filename, globals_, locals_)
+                    else:
+                        with open(filename, 'r') as f:
+                            code = f.read()
+                        exec(compile(code, filename, 'exec'), globals_ if globals_ is not None else globals(), locals_)
+
+                def reload_compat(module):
+                    if is_py2():
+                        reload(module)
+                    else:
+                        import importlib
+                        importlib.reload(module)
+                    
+                # Try to import normally first
+                try:
+                    import HaxGameExporter
+                    reload_compat(HaxGameExporter)  # Reload to ensure we have the latest version
+                except (ImportError, SyntaxError) as e:
+                    cmds.warning("Standard import failed: " + str(e) + ". Trying alternative method...")
+                    
+                    # If we get here, there was an issue importing the module normally
+                    # Try to execfile() the Python file directly which can sometimes work around certain import issues
+                    execfile_compat(script_file)
+                    
+                    # The execfile should have defined initialize_exporter() function in the global namespace
+                    if 'initialize_exporter' in globals():
+                        initialize_exporter()
+                    else:
+                        QMessageBox.warning(self, "Error", "Could not find initialize_exporter function after loading script")
+                        return
+                else:
+                    # If import succeeded, run normally
+                    HaxGameExporter.initialize_exporter()
+                    
+            except ImportError:
+                QMessageBox.warning(self, "Error", "HaxGameExporter module not found. Please ensure it's installed in Maya's scripts directory.")
+            except Exception:
+                error_msg = "Error launching HaxGameExporter:\n" + traceback.format_exc()
+                QMessageBox.critical(self, "Error", error_msg)
+            
+            # Close the toolkit after launching the exporter
+            self.close()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to launch Animation Exporter:\n{str(e)}")
+    
+    def launch_print_skeleton_hierarchy(self):
+        """Launch the Print Skeleton Hierarchy tool"""
+        try:
+            # Use the main directory path
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Make sure script directory is in path
+            if script_dir not in sys.path:
+                sys.path.insert(0, script_dir)
+            
+            # Check if any skeleton joints are selected
+            selection = cmds.ls(selection=True, type="joint")
+            if not selection:
+                QMessageBox.warning(self, "Selection Required", "Please select the root joint of your skeleton before running this tool.")
+                return
+            
+            # Import the module
+            try:
+                # Try direct import first
+                import PrintSkeletonHierarchy
+                # Reload to ensure we have the latest version
+                importlib.reload(PrintSkeletonHierarchy)
+                
+                # The script runs automatically when imported, but we want more control
+                # So we'll execute the main functionality directly
+                root_joint = selection[0]
+                joint_data = PrintSkeletonHierarchy.print_hierarchy_with_transforms(root_joint)
+                json_file = PrintSkeletonHierarchy.save_reference_pose_data(joint_data)
+                mel_file = PrintSkeletonHierarchy.generate_mel_zero_pose_script(joint_data)
+                
+                # Show success message with file paths
+                QMessageBox.information(self, "Reference Pose Generated", 
+                                      f"Successfully generated reference pose files:\n\n" +
+                                      f"JSON: {json_file}\n" +
+                                      f"MEL: {mel_file}\n\n" +
+                                      f"These files can now be used with the Animation Importer tool.")
+                
+            except ImportError:
+                # Fall back to manual script execution
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                skeleton_script = os.path.join(script_dir, "PrintSkeletonHierarchy.py")
+                
+                if not os.path.exists(skeleton_script):
+                    QMessageBox.warning(self, "Error", f"Print Skeleton Hierarchy script not found.\nExpected location: {skeleton_script}")
+                    return
+                    
+                # Execute the script in Maya's Python environment
+                cmds.evalDeferred(f"execfile(r'{skeleton_script}')")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to run Print Skeleton Hierarchy:\n{str(e)}")
+    
     def show_about(self):
         """Show the About dialog"""
         about_text = """
@@ -566,6 +790,12 @@ This toolkit provides automated tools to streamline the process of working with 
         associated unskinned meshes to their respective joints based on naming conventions.</li>
         <li><b>Weapon Rig Tool:</b> Creates control curves for rigged weapons with automatic shape detection 
         and intelligent joint-mesh analysis for easy animation workflows.</li>
+        <li><b>Animation Importer:</b> Imports game animations with proper reference pose configuration and
+        integration with Advanced Skeleton's mocap tools.</li>
+        <li><b>Animation Exporter:</b> Exports animations with game-ready settings and optimized presets
+        designed specifically for S.T.A.L.K.E.R. 2 animation pipeline.</li>
+        <li><b>Print Skeleton Hierarchy:</b> Generates reference pose data files needed for the Animation Importer
+        and creates MEL scripts for zero pose configuration.</li>
         </ul>
 
 <h3>Features:</h3>
@@ -638,16 +868,30 @@ def show_stalker2_toolkit():
     # Always reload the toolkit modules for fresh execution
     try:
         import sys
-        modules_to_reload = ['material_texture_matcher', 'weapon_importer', 'weapon_rig_tool']
+        # Use the main script directory - no subfolder needed
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Add script directory to path if it's not already there
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        
+        # Define modules to reload
+        modules_to_reload = ['stalker2_toolkit', 
+                            'material_texture_matcher', 
+                            'weapon_importer', 
+                            'weapon_rig_tool',
+                            'PrintSkeletonHierarchy',
+                            'asAnimationImporter',
+                            'animation_retargeting_tool']
+        
         for module_name in modules_to_reload:
             if module_name in sys.modules:
                 if sys.version_info[0] >= 3:
-                    import importlib
                     importlib.reload(sys.modules[module_name])
                 else:
                     reload(sys.modules[module_name])
     except Exception as e:
-        print("Note: Could not reload toolkit modules: " + str(e))
+        print(f"Note: Could not reload toolkit modules: {str(e)}")
     
     parent = get_maya_main_window()
     dialog = STALKER2ToolkitDialog(parent)
@@ -667,8 +911,16 @@ def safe_launch_stalker2_toolkit():
         if toolkit_dir not in sys.path:
             sys.path.insert(0, toolkit_dir)
         
+        # No subfolder needed anymore
+        
         # Reload modules for fresh execution
-        modules_to_reload = ['stalker2_toolkit', 'material_texture_matcher', 'weapon_importer', 'weapon_rig_tool']
+        modules_to_reload = ['stalker2_toolkit', 
+                            'material_texture_matcher', 
+                            'weapon_importer', 
+                            'weapon_rig_tool',
+                            'PrintSkeletonHierarchy',
+                            'asAnimationImporter',
+                            'animation_retargeting_tool']
         for module_name in modules_to_reload:
             if module_name in sys.modules:
                 if sys.version_info[0] >= 3:
@@ -684,7 +936,7 @@ def safe_launch_stalker2_toolkit():
         return True
         
     except Exception as e:
-        error_msg = "Failed to launch S.T.A.L.K.E.R. 2 Toolkit: " + str(e)
+        error_msg = f"Failed to launch S.T.A.L.K.E.R. 2 Toolkit: {str(e)}"
         print(error_msg)
         try:
             cmds.error(error_msg)

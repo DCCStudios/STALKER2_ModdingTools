@@ -2,100 +2,97 @@
 
 A comprehensive toolkit designed specifically for STALKER 2 modding workflows in Autodesk Maya.
 
-## Features
+## 📥 INSTALLATION
 
-- **Cross-Maya Version Compatibility**: Works with Maya 2025+ (Python 3, PySide6) and earlier versions (Python 2, PySide2)
-- **Dark Mode UI**: Modern interface consistent with STALKER 2 aesthetic
-- **Drag & Drop Installation**: Simple one-click installation process
-- **Custom STALKER 2 Icon**: Professional shelf button with authentic STALKER branding
-- **Modular Design**: Easy to expand with additional tools
+### Quick Installation (Recommended)
+1. **Download or clone** this repository to your computer
+2. **Drag** `Scripts/INSTALL_STALKER2_TOOLKIT.mel` into Maya's viewport
+3. **Follow** the on-screen prompts (including installing the Animation Exporter when prompted)
+4. **Access** the toolkit using the new "STALKER2" shelf button
 
-## Current Tools
+### Manual Installation
+1. Copy files from `Scripts` folder to Maya's scripts directory:
+   - Windows: `Documents/maya/[version]/scripts/`
+   - Mac: `~/Library/Preferences/Autodesk/maya/[version]/scripts/`
+2. Ensure `animation_importer_data` and `hax_exporter_data` folders are directly in the scripts directory
+3. Launch with: `import stalker2_toolkit; stalker2_toolkit.show_stalker2_toolkit()`
+
+## ⚙️ Tools Overview
 
 ### Material-Texture Matcher
-Automatically assigns textures to materials based on strict naming conventions:
-- **Material Prefix**: `MI_` (e.g., `MI_arm_ban_06_a`)
-- **Texture Prefix**: `T_` (e.g., `T_arm_ban_06_a_D.png`)
-- **Supported Textures**: 
-  - `_D` (Diffuse/Albedo)
-  - `_N` (Normal maps)
-- **Ignored Textures**: `_RMA` and other types
-- **Strict Matching**: 90%+ similarity required to prevent incorrect assignments
+- **Purpose**: Automatically assigns textures to materials based on naming conventions
+- **Workflow**: Select mesh objects → browse to texture directory → assign textures
+- **Naming**: Materials (`MI_*`) → Textures (`T_*_D.png`, `T_*_N.png`)
 
 ### Weapon Importer
-Import weapon skeletons and automatically constrain associated mesh parts:
-- **Skeleton Files**: `SK_` prefix (e.g., `SK_AK74.FBX`)
-- **Mesh Parts**: Any FBX files without `SK_` prefix
-- **Joint Analysis**: Extracts joints with `jnt_` prefix from skeleton
-- **Smart Matching**: Intelligent algorithm matches mesh files to joints based on naming
-- **Auto-Constraints**: Creates position and rotation constraints automatically
-- **Organization**: Optional grouping into `S2_Weapon > S2_Skeleton + S2_Mesh`
+- **Purpose**: Import weapon skeletons and constrain mesh parts automatically
+- **Features**: 
+  - Smart joint-mesh association
+  - Automatic constraint generation
+  - Animation import from FBX files
+  - Load completed rigs into the scene
+  - Load Animations onto weapon rigs
 
 ### Weapon Rig Tool
-Create control curves for rigged weapons with intelligent automation:
-- **Scene Analysis**: Automatically detects joint-mesh constraints from Weapon Importer
-- **Control Shapes**: Auto-detects optimal shapes (sphere/cube/cylinder) based on mesh dimensions
-- **Smart Sizing**: Calculates appropriate control scale from mesh bounding boxes
-- **Transform Matching**: Controls inherit joint positions/rotations for seamless animation transfer
-- **Complete Rigs**: Full rig setup with organized hierarchy and constraint systems
-- **Rig Management**: Tools to select, delete, and manage existing weapon rigs
+- **Purpose**: Create animation-ready control rigs for weapons
+- **Features**:
+  - Smart control shape detection
+  - Automatic constraint setup
+  - Animation-friendly transform matching
+  - Support for all weapon parts
 
-## Installation
+### Animation Importer
+- **Purpose**: Import game animations with advanced options for the Character Rig
+- **Features**:
+  - Reference pose application
+  - Automatic frame range setting
+  - Advanced Skeleton integration
 
-### Method 1: Drag & Drop (Recommended)
-1. **Download** or copy all files to your computer
-2. **Drag** `INSTALL_STALKER2_TOOLKIT.mel` into Maya's viewport
-3. **Wait** for installation to complete
-4. **Click** the new "STALKER2" button on your shelf
 
-### Method 2: Manual Installation
-1. Copy the `Scripts` folder to Maya's scripts directory:
-   - **Windows**: `Documents/maya/[version]/scripts/`
-   - **Mac**: `~/Library/Preferences/Autodesk/maya/[version]/scripts/`
-   - **Linux**: `~/maya/[version]/scripts/`
-2. Run in Maya's Script Editor:
-   ```python
-   import stalker2_toolkit
-   stalker2_toolkit.show_stalker2_toolkit()
-   ```
+### Animation Exporter (Highly Recommended)
+- **Purpose**: Export animations with proper game-ready settings
+- **Features**:
+  - Optimized export presets for STALKER 2
+  - Animation clip management
+  - Batch export capabilities
+  - FBX compatibility options
 
-## Usage
+### Animation Retargeting Tool by Joar Engberg
+- **Purpose**: Transfer animations between skeletons or from mocap to custom rigs
+- **Features**:
+  - Weapon animation presets
+  - Intelligent joint-control mapping
+  - Post-bake operations
+  - Support for namespace handling
+
+### Print Skeleton Hierarchy
+- **Purpose**: Generate reference pose data for animation workflows
+- **Features**:
+  - Exports joint data to JSON and MEL
+  - Supports Animation Importer configuration
+  - Joint transform recording
+
+## 🔧 Usage
 
 ### Opening the Toolkit
 - **Shelf Button**: Click the "STALKER2" button on your shelf
 - **Script Editor**: Run `import stalker2_toolkit; stalker2_toolkit.show_stalker2_toolkit()`
 
-### Using Material-Texture Matcher
-1. **Select** mesh objects with materials assigned (materials must have `MI_` prefix)
-2. **Open** STALKER 2 Toolkit from shelf button
-3. **Click** "Material-Texture Matcher" button
-4. **Browse** to directory containing textures (with `T_` prefix)
-5. **Click** "Assign Textures"
-6. **Review** results in the popup dialog
+### Typical Workflows
 
-### Using Weapon Importer
-1. **Prepare** weapon files in directory with `SK_` skeleton and mesh FBX files
-2. **Open** STALKER 2 Toolkit from shelf button  
-3. **Click** "Weapon Importer" button
-4. **Set** master path to your STALKER2_ModdingTools directory
-5. **Select** weapon category and specific weapon
-6. **Review** joint-mesh associations in the analysis panel
-7. **Click** "Import Weapon" to import with automatic constraints
-8. **Optional**: Use "Create Weapon Directory" to set up folder structure
+**Weapon Animation Workflow**:
+1. Use Weapon Importer to import the weapon model and skeleton
+2. Use Weapon Rig Tool to create control curves for animation
+3. Use Animation Importer to import animation onto the weapon
+4. Use Animation Retargeting Tool for fine-tuning animations
+5. Use Animation Exporter to export the final animation
 
-### Using Weapon Rig Tool
-1. **Import** a weapon first using the Weapon Importer
-2. **Open** STALKER 2 Toolkit and click "Weapon Rig Tool"
-3. **Review** scene analysis showing detected joint-mesh constraints
-4. **Choose** control options (auto-shape detection recommended)
-5. **Click** "Create Complete Weapon Rig" for full setup
-6. **Animate** using the generated control curves instead of joints directly
+**Material Setup Workflow**:
+1. Import mesh with materials (ensure `MI_` prefix on materials)
+2. Use Material-Texture Matcher to find and assign textures
+3. Review and adjust material settings if needed
 
-### Example Naming Convention
-```
-Materials:          Textures:
-MI_arm_ban_06_a  →  T_arm_ban_06_a_D.png  (Diffuse)
-                 →  T_arm_ban_06_a_N.png  (Normal)
+## 🔍 Troubleshooting
 
 Weapons:            Structure:
 SK_AK74.FBX      →  Skeleton file
@@ -225,21 +222,22 @@ Planned features for upcoming releases:
 - Use auto-shape detection in Weapon Rig Tool for optimal control curve shapes
 - Always organize imported assets using the grouping options for cleaner scenes
 
-### Error Reporting
+## 🔄 Compatibility
 
-If you encounter issues:
-1. Check Maya's Script Editor for detailed error messages
-2. Verify file and folder permissions
-3. Ensure all files are in correct locations
-4. Check Maya version compatibility
+- **Maya Versions**: 2025+ (Python 3, PySide6) and earlier (Python 2, PySide2)
+- **Operating Systems**: Windows, macOS, Linux
+- **Required Components**: 
+  - Animation Exporter (highly recommended)
+  - animation_importer_data folder
+  - hax_exporter_data folder
 
-## Development
+## 💻 Development
 
 This toolkit is designed for expansion. To add new tools:
 
-1. Create your tool script in the `Scripts` folder
-2. Add the tool to `stalker2_toolkit.py` in the appropriate section
-3. Update the installer's `script_files` list if needed
+1. Create your tool script in the Scripts folder
+2. Add the tool to stalker2_toolkit.py in the appropriate section
+3. Update the installer's file lists if needed
 4. Follow the existing dark mode styling conventions
 
 ### API Example
@@ -255,4 +253,4 @@ new_section = self.create_section("Your Tool Category", [
 
 **Developed for the STALKER 2 modding community**
 
-*Version 1.0 - Compatible with all Maya versions* 
+*Version 1.1 - Compatible with all Maya versions*

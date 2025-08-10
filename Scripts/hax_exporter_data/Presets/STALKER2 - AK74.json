@@ -1,0 +1,45 @@
+{
+  "export_settings": {
+    "fileType": "Binary",
+    "fbxVersion": "2018",
+    "embedMedia": true,
+    "bakeAnimation": true,
+    "moveToOrigin": true,
+    "exportPath": "G:/STALKER2_AnimationSource/Testing",
+    "clipPrefix": "",
+    "exportMode": "Export Selected Clips",
+    "currentPreset": "<None>",
+    "removeNamespaces": false,
+    "includeChildren": true,
+    "inputConnections": false,
+    "rotationOffset": {
+      "enabled": true,
+      "joint": "ak74_rig:S2_WeaponRig",
+      "rotationX": 0.0,
+      "rotationY": 90.0,
+      "rotationZ": 0.0
+    },
+    "altRootControl": "ak74_rig:jnt_wpn_ak74_ctrl"
+  },
+  "root_joints": [
+    "ak74_rig:jnt_wpn_ak74",
+    "ak74_rig:jnt_offset",
+    "ak74_rig:jnt_selector_plate",
+    "ak74_rig:jnt_trigger",
+    "ak74_rig:jnt_shutter",
+    "ak74_rig:jnt_magazine_tab",
+    "ak74_rig:jnt_magazine",
+    "ak74_rig:jnt_l_hand",
+    "ak74_rig:jnt_r_hand",
+    "ak74_rig:jnt_magazine1",
+    "ak74_rig:jnt_bullet",
+    "ak74_rig:jnt_ring",
+    "ak74_rig:jnt_bullet_shell"
+  ],
+  "animation_layer_states": {
+    "Base Animation": true,
+    "BaseAnimation": true,
+    "ak74_rig:BaseAnimation": true,
+    "ak74_rig:WeaponAnimation": true
+  }
+}

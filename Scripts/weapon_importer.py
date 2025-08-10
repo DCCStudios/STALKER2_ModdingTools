@@ -703,6 +703,12 @@ class WeaponImporterDialog(QDialog):
         self.load_rig_btn.clicked.connect(self.load_weapon_rig)
         single_weapon_layout.addWidget(self.load_rig_btn)
         
+        # Load Animation button
+        self.load_anim_btn = QPushButton("Load Animation")
+        self.load_anim_btn.setProperty("class", "secondary-button")
+        self.load_anim_btn.clicked.connect(self.load_animation)
+        single_weapon_layout.addWidget(self.load_anim_btn)
+        
         import_buttons_layout.addLayout(single_weapon_layout)
         
         # Create all directories button
@@ -3005,6 +3011,694 @@ class WeaponImporterDialog(QDialog):
             "Launchers": "gl",
             "Grenades": "grenades"
         }
+    
+    def load_animation(self):
+        """Open popup to choose animation import type and proceed with selected option"""
+        # Check if a weapon control curve is selected
+        selection = cmds.ls(selection=True)
+        if not selection:
+            QMessageBox.warning(self, "Selection Required", "Please select a control curve on the weapon rig first.")
+            return
+        
+        # Verify that the selection is part of a weapon rig
+        selected_control = selection[0]
+        if not selected_control.endswith("_ctrl") and not "_ctrl" in selected_control:
+            QMessageBox.warning(self, "Invalid Selection", 
+                              "Please select a control curve from the weapon rig (should end with '_ctrl').")
+            return
+            
+        # Get corresponding joint name (remove "_ctrl" suffix)
+        if selected_control.endswith("_ctrl"):
+            joint_base_name = selected_control[:-5]  # Remove "_ctrl" suffix
+        else:
+            # Handle case where "_ctrl" might be in the middle of the name
+            parts = selected_control.split("_ctrl")
+            joint_base_name = parts[0]
+        
+        # Open file browser to select animation file - filter for FBX files only
+        file_filter = "FBX Files (*.fbx)"
+        result = QFileDialog.getOpenFileName(self, "Select Animation File", "", file_filter)
+        
+        if not result[0]:
+            return  # User cancelled
+            
+        anim_file_path = result[0]
+        
+        # Show popup asking if weapon should be attached to character rig
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle("Animation Import Options")
+        msg_box.setText("How do you want to import this animation?")
+        standalone_btn = msg_box.addButton("Standalone Animation", QMessageBox.ActionRole)
+        attach_btn = msg_box.addButton("Attach to Character Rig", QMessageBox.ActionRole)
+        cancel_btn = msg_box.addButton(QMessageBox.Cancel)
+        
+        msg_box.exec_()
+        
+        if msg_box.clickedButton() == cancel_btn:
+            return
+        elif msg_box.clickedButton() == attach_btn:
+            # Placeholder for character rig attachment
+            QMessageBox.information(self, "Feature Coming Soon", 
+                                 "Attaching to character rig feature will be implemented in a future update.")
+            return
+        
+        # Proceed with standalone animation import
+        self.do_import_standalone_animation(anim_file_path, selected_control, joint_base_name)
+    
+    def import_standalone_animation(self):
+        """Legacy method - redirects to load_animation"""
+        self.load_animation()
+    
+    def do_import_standalone_animation(self, anim_file_path, selected_control, joint_base_name):
+        """
+        Import standalone animation onto weapon control curves using the Animation Retargeting Tool
+        
+        Process:
+        1. Import the animation file into WeaponImport namespace
+        2. Open the Animation Retargeting Tool
+        3. Create connections based on weapon retarget presets
+        4. Bake the animation
+        5. Apply weapon-specific adjustments (rotating S2_Controls)
+        """
+        try:
+            # Import the animation file
+            print("\n=== IMPORTING WEAPON ANIMATION ===")
+            print("Animation file: {}".format(anim_file_path))
+            print("Selected control: {}".format(selected_control))
+            
+            # Use a fixed namespace "WeaponImport" for all animation imports
+            namespace = "WeaponImport"
+            
+            print("// STEP 1: Setting up WeaponImport namespace")
+            
+            # IMPORTANT: Create/setup the namespace BEFORE import
+            try:
+                # First check if the namespace exists
+                if cmds.namespace(exists=namespace):
+                    print(f"// Namespace '{namespace}' already exists")
+                    
+                    # Try to reset it by removing objects (if possible)
+                    try:
+                        # List objects in namespace to see what we're dealing with
+                        namespace_objects = cmds.ls(f"{namespace}:*")
+                        print(f"// Found {len(namespace_objects)} objects in namespace '{namespace}'")
+                        
+                        # Try to delete objects in the namespace first
+                        for obj in namespace_objects:
+                            try:
+                                if cmds.objExists(obj) and not cmds.lockNode(obj, query=True)[0]:
+                                    cmds.delete(obj)
+                                    print(f"// Deleted: {obj}")
+                            except Exception as e:
+                                print(f"// Could not delete {obj}: {str(e)}")
+                        
+                        # Try to remove the now hopefully empty namespace
+                        try:
+                            cmds.namespace(removeNamespace=namespace, force=True)
+                            print(f"// Successfully removed existing namespace '{namespace}'")
+                            # Now recreate it fresh
+                            cmds.namespace(add=namespace)
+                            print(f"// Created fresh namespace '{namespace}'")
+                        except Exception as e:
+                            print(f"// Could not remove namespace: {str(e)}")
+                            print(f"// Will use existing namespace '{namespace}' as is")
+                    except Exception as e:
+                        print(f"// Error managing existing namespace: {str(e)}")
+                else:
+                    # Create the namespace if it doesn't exist
+                    print(f"// Creating new namespace '{namespace}'")
+                    cmds.namespace(add=namespace)
+                    print(f"// Successfully created namespace '{namespace}'")
+            except Exception as e:
+                print(f"// Error in namespace management: {str(e)}")
+                
+                # As a fallback, try using MEL commands to ensure namespace exists
+                try:
+                    print("// Attempting namespace creation via MEL as fallback")
+                    mel.eval(f'namespace -exists "{namespace}";')
+                    mel.eval(f'if (!`namespace -exists "{namespace}"`) {{ namespace -add "{namespace}"; }}')
+                    print(f"// Namespace '{namespace}' ensured via MEL")
+                except Exception as mel_error:
+                    print(f"// MEL namespace fallback also failed: {str(mel_error)}")
+                    # Continue anyway, as Maya will create the namespace during import if needed
+            
+            # Verify the namespace exists before proceeding
+            if cmds.namespace(exists=namespace):
+                print(f"// CONFIRMED: Namespace '{namespace}' exists and is ready for import")
+            else:
+                print(f"// WARNING: Namespace '{namespace}' could not be verified")
+            
+            # Set the current namespace to WeaponImport to match the screenshot
+            # This is critical - ensures the namespace is selected as shown in the screenshot
+            cmds.namespace(set=':')  # First go to root
+            cmds.namespace(set=namespace)  # Then set to WeaponImport
+            print(f"// Current namespace set to '{namespace}'")
+            
+            # Explicitly force "Use namespaces" option to be checked
+            mel.eval('optionVar -iv "useNamespaces" 1;')
+            
+            print("// STEP 2: Getting pre-import state")
+            # Get list of joints before import
+            joints_before = set(cmds.ls(type='joint'))
+            print(f"// Found {len(joints_before)} joints before import")
+            
+            print("// STEP 3: Importing file with namespace")
+            # Import the file with the namespace - using exact settings from screenshot and animation importer settings
+            # Settings: "Use namespaces" checked + "Merge into selected namespace and rename incoming objects that match"
+            cmds.file(
+                anim_file_path, 
+                i=True,
+                namespace=namespace,
+                options="v=0",
+                preserveReferences=True,
+                mergeNamespacesOnClash=True,  # This enables "Merge into selected namespace"
+                renameAll=True,               # This enables "rename incoming objects that match"
+                importFrameRate=True,         # Framerate Import: Maintain Original
+                importTimeRange="override"    # Animation Range: Override to Match Source
+            )
+            print(f"// Import completed with namespace '{namespace}'")
+            
+            # Set timeline to start at frame -1 after import is complete
+            try:
+                min_time = -1  # Always start at -1
+                
+                # Get current timeline settings that were imported from the file
+                current_min = cmds.playbackOptions(query=True, min=True)
+                current_max = cmds.playbackOptions(query=True, max=True)
+                current_anim_start = cmds.playbackOptions(query=True, animationStartTime=True)
+                current_anim_end = cmds.playbackOptions(query=True, animationEndTime=True)
+                
+                print(f"// Current timeline settings: min={current_min}, max={current_max}")
+                print(f"// Current animation range: start={current_anim_start}, end={current_anim_end}")
+                
+                # Keep the end frame from the import but set start to -1
+                cmds.playbackOptions(min=min_time, max=current_max)
+                cmds.playbackOptions(animationStartTime=min_time, animationEndTime=current_anim_end)
+                
+                # Go to start frame
+                cmds.currentTime(min_time)
+                print(f"// Timeline adjusted: Start frame set to {min_time}, keeping end frame at {current_max}")
+            except Exception as e:
+                print(f"// Warning: Could not set timeline start frame: {str(e)}")
+            
+            # Get list of joints after import and find the new ones
+            joints_after = set(cmds.ls(type='joint'))
+            imported_joints = list(joints_after - joints_before)
+            
+            # Filter for joints in our namespace
+            # Filter for joints in our namespace - handle both with and without colon
+            imported_joints = [joint for joint in imported_joints if joint.startswith(namespace + ":") or joint.startswith(namespace)]
+            
+            # Print imported joint names for debugging
+            print("// Imported joints:")
+            for joint in imported_joints[:10]:  # Limit to first 10 to avoid spam
+                print(f"//   - {joint}")
+            if len(imported_joints) > 10:
+                print(f"//   - ... and {len(imported_joints) - 10} more")
+            
+            if not imported_joints:
+                QMessageBox.warning(self, "Import Failed", "No joints found in the imported animation file.")
+                return
+                
+            print(f"Imported {len(imported_joints)} joints in namespace '{namespace}'")
+            print("Imported {} joints".format(len(imported_joints)))
+            
+            # Switch back to root namespace
+            print("// Switching back to root namespace")
+            cmds.namespace(set=':')
+            print("// Current namespace is now: root")
+            
+            # =========================================================================
+            # STEP 4: Launch Animation Retargeting Tool for manual setup
+            # =========================================================================
+            print("\n// STEP 4: Launching Animation Retargeting Tool for manual setup")
+            
+            # Get weapon ID from the selected control to find the retarget preset
+            weapon_id = self.get_weapon_id_from_control(selected_control)
+            print(f"// Identified weapon: {weapon_id}")
+            
+            # Load retarget preset if available
+            try:
+                retarget_settings = self.load_weapon_retarget_preset(weapon_id)
+            except Exception as e:
+                print(f"// Error loading retargeting preset for {weapon_id}: {str(e)}")
+                retarget_settings = self.get_default_retarget_settings(weapon_id)
+            
+            # Import the animation retargeting tool
+            try:
+                import importlib
+                
+                # Try to import animation retargeting tool
+                # First find the local copy
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                anim_retarget_path = os.path.join(script_dir, "animation_retargeting_tool.py")
+                
+                if os.path.exists(anim_retarget_path):
+                    # Load directly from file to ensure we have the updated version
+                    print(f"// Found animation_retargeting_tool at: {anim_retarget_path}")
+                    try:
+                        # Use a simple module-like object with the necessary functions
+                        animation_retargeting_tool = type('SimpleModule', (), {})()
+                        
+                        # Execute the script in a namespace and grab the functions we need
+                        # Include all necessary imports for the script
+                        module_namespace = {
+                            '__file__': anim_retarget_path,
+                            'os': os,
+                            'sys': sys, 
+                            'cmds': cmds,
+                            'json': json
+                        }
+                        
+                        # Add collections.OrderedDict
+                        try:
+                            from collections import OrderedDict
+                            module_namespace['OrderedDict'] = OrderedDict
+                        except ImportError:
+                            pass
+                            
+                        # Add maya modules
+                        try:
+                            import maya.mel
+                            module_namespace['maya'] = maya
+                        except ImportError:
+                            pass
+                        
+                        # Try to include PySide to avoid import errors
+                        try:
+                            import PySide2
+                            module_namespace['PySide2'] = PySide2
+                            from PySide2 import QtCore, QtGui, QtWidgets
+                            module_namespace['QtCore'] = QtCore
+                            module_namespace['QtGui'] = QtGui
+                            module_namespace['QtWidgets'] = QtWidgets
+                        except ImportError:
+                            try:
+                                import PySide6
+                                module_namespace['PySide6'] = PySide6
+                                from PySide6 import QtCore, QtGui, QtWidgets
+                                module_namespace['QtCore'] = QtCore
+                                module_namespace['QtGui'] = QtGui
+                                module_namespace['QtWidgets'] = QtWidgets
+                            except ImportError:
+                                pass
+                                
+                        # Execute the script file
+                        with open(anim_retarget_path, 'r') as f:
+                            exec(f.read(), module_namespace)
+                        
+                        # Store the functions we need
+                        animation_retargeting_tool.start = module_namespace['start']
+                        print("// Successfully loaded start() function")
+                    except Exception as e:
+                        print(f"// Error loading from file: {str(e)}")
+                        # Fall back to regular import
+                        try:
+                            import animation_retargeting_tool
+                            importlib.reload(animation_retargeting_tool)
+                        except ImportError:
+                            # If not found in main path, try with stalker2_toolkit prefix
+                            try:
+                                from stalker2_toolkit import animation_retargeting_tool
+                                importlib.reload(animation_retargeting_tool)
+                            except ImportError:
+                                QMessageBox.critical(self, "Error", "Could not import animation_retargeting_tool module.")
+                                return
+                else:
+                    # If local file not found, try regular import
+                    try:
+                        import animation_retargeting_tool
+                        importlib.reload(animation_retargeting_tool)
+                    except ImportError:
+                        # If not found in main path, try with stalker2_toolkit prefix
+                        try:
+                            from stalker2_toolkit import animation_retargeting_tool
+                            importlib.reload(animation_retargeting_tool)
+                        except ImportError:
+                            QMessageBox.critical(self, "Error", "Could not import animation_retargeting_tool module.")
+                            return
+                
+                print("// Successfully imported Animation Retargeting Tool")
+                
+                # Find available presets
+                available_presets = []
+                default_preset = None
+                
+                try:
+                    # Make sure we have the master path
+                    if not hasattr(self, 'master_path') or not self.master_path:
+                        print("// Warning: Master path not set, using limited preset search")
+                    
+                    # 1. First look for weapon-specific preset
+                    weapon_path = self.find_weapon_path_by_id(weapon_id)
+                    if weapon_path and os.path.isdir(weapon_path):
+                        weapon_preset = os.path.join(weapon_path, f"{weapon_id}_retarget.json")
+                        if os.path.exists(weapon_preset):
+                            available_presets.append((f"Weapon: {weapon_id}", weapon_preset))
+                            default_preset = weapon_preset
+                            print(f"// Found weapon-specific preset: {weapon_preset}")
+                    
+                    # 2. Look for weapon type presets in parent directory
+                    if weapon_path and os.path.isdir(weapon_path):
+                        parent_path = os.path.dirname(weapon_path)
+                        if os.path.isdir(parent_path):
+                            parent_name = os.path.basename(parent_path)
+                            parent_presets = [os.path.join(parent_path, f) for f in os.listdir(parent_path) 
+                                            if f.endswith("_retarget.json") and not f.startswith(weapon_id)]
+                            for p in parent_presets:
+                                preset_name = os.path.basename(p).replace("_retarget.json", "")
+                                available_presets.append((f"Category: {preset_name}", p))
+                                print(f"// Found category preset: {p}")
+                    
+                    # 3. Look in master path's Scripts directory for global presets
+                    if hasattr(self, 'master_path') and self.master_path:
+                        scripts_dir = os.path.join(self.master_path, "Scripts")
+                        presets_dir = os.path.join(scripts_dir, "retarget_presets")
+                        
+                                                # Create presets directory if it doesn't exist
+                        if not os.path.exists(presets_dir):
+                            try:
+                                os.makedirs(presets_dir)
+                                print(f"// Created presets directory: {presets_dir}")
+                            except Exception as e:
+                                print(f"// Warning: Could not create presets directory: {str(e)}")
+                                pass
+        
+                        # Look for global presets
+                        if os.path.exists(presets_dir):
+                            global_presets = [os.path.join(presets_dir, f) for f in os.listdir(presets_dir) 
+                                            if f.endswith(".json")]
+                            for p in global_presets:
+                                preset_name = os.path.basename(p).replace(".json", "").replace("_retarget", "")
+                                available_presets.append((f"Global: {preset_name}", p))
+                                print(f"// Found global preset: {p}")
+                    
+                    # 4. Create default preset if none found
+                    if not available_presets and weapon_path and os.path.isdir(weapon_path):
+                        default_preset = os.path.join(weapon_path, f"{weapon_id}_retarget.json")
+                        default_settings = self.get_default_retarget_settings(weapon_id)
+                        with open(default_preset, 'w') as f:
+                            json.dump(default_settings, f, indent=4)
+                        available_presets.insert(0, (f"Default: {weapon_id}", default_preset))
+                        print(f"// Created default preset: {default_preset}")
+                    
+                    # Always add "No Preset" option
+                    available_presets.append(("No Preset", None))
+                    
+                except Exception as e:
+                    print(f"// Error finding/creating presets: {str(e)}")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to import Animation Retargeting Tool: {str(e)}")
+                print(f"// Error importing Animation Retargeting Tool: {str(e)}")
+                return
+            
+            # Create pairs list for retargeting
+            retarget_pairs = []
+            
+            # Find all control curves and matching imported joints
+            all_controls = cmds.ls("*_ctrl", "*:*_ctrl")
+            control_namespace = ""
+            
+            # Extract namespace from selected control
+            control_parts = selected_control.split(':')
+            if len(control_parts) > 1:
+                control_namespace = ':'.join(control_parts[:-1]) + ':'
+            
+            # Find weapon controls with matching namespace
+            weapon_controls = [ctrl for ctrl in all_controls if ctrl.startswith(control_namespace)]
+            print(f"// Found {len(weapon_controls)} weapon controls with namespace: {control_namespace}")
+            
+            # Match each control to imported joint
+            for control in weapon_controls:
+                # Get base name without _ctrl
+                if control.endswith("_ctrl"):
+                    base_name = control[:-5]
+            else:
+                    base_name = control.split("_ctrl")[0]
+                
+                    # Get short name without namespace
+                    base_short_name = base_name.split(':')[-1]
+                    
+                    # Expected joint name in the import namespace
+                    expected_joint = f"{namespace}:{base_short_name}"
+                    
+                    if cmds.objExists(expected_joint):
+                        retarget_pairs.append((expected_joint, control, base_short_name))
+                        print(f"// Found match: {expected_joint} → {control}")
+            
+            if not retarget_pairs:
+                QMessageBox.warning(self, "No Matches Found", "Could not find matching joints for any weapon controls.")
+                return
+                
+            # Sort pairs based on hierarchy depth (top of hierarchy first)
+            print("// Sorting pairs based on hierarchy depth (top to bottom)")
+            
+            # First get hierarchy information for each joint
+            hierarchy_data = []
+            for joint, control, joint_name in retarget_pairs:
+                try:
+                    # Calculate hierarchy depth (number of parents)
+                    hierarchy_path = cmds.listRelatives(joint, fullPath=True, allParents=True) or []
+                    depth = len(hierarchy_path)
+                    
+                    # Also get actual path for visualization
+                    full_path = cmds.ls(joint, long=True)[0] if cmds.ls(joint, long=True) else joint
+                    
+                    # Store tuple of (joint, control, joint_name, depth, full_path)
+                    hierarchy_data.append((joint, control, joint_name, depth, full_path))
+                    
+                    print(f"//   {joint} → depth {depth}, path: {full_path}")
+                except Exception as e:
+                    print(f"// Warning: Could not process hierarchy for {joint}: {str(e)}")
+                    # If we can't get hierarchy, assume it's at depth 999 (will be processed last)
+                    hierarchy_data.append((joint, control, joint_name, 999, joint))
+            
+            # Sort by depth (lower depth = higher in hierarchy = processed first)
+            hierarchy_data.sort(key=lambda x: x[3])
+            
+            # Replace retarget_pairs with sorted version
+            retarget_pairs = [(j, c, n) for j, c, n, _, _ in hierarchy_data]
+            
+            print("// Sorted retarget pairs (top to bottom):")
+            for i, (joint, control, _) in enumerate(retarget_pairs):
+                print(f"//   {i+1}. {joint} → {control}")
+            
+            # Use the built-in preset selection UI in animation_retargeting_tool
+            print("// STEP 4: Launching Animation Retargeting Tool with integrated preset selector")
+            print(f"// Identified weapon: {weapon_id}")
+            
+            # Get the weapon ID from the selected control (if not already known)
+            if not weapon_id:
+                weapon_id = self.get_weapon_id_from_control(selected_control)
+                print(f"// Extracted weapon ID from control: {weapon_id}")
+            
+            # Launch the animation retargeting tool with our parameters
+            # The tool's built-in preset selector will handle the preset selection
+            try:
+                print(f"// Calling animation_retargeting_tool.start with parameters: preset=None, namespace={namespace}, master_path={self.master_path}, weapon_id={weapon_id}")
+                
+                # Try direct call with positional arguments
+                animation_retargeting_tool.start(None, namespace, self.master_path, weapon_id)
+                print("// Successfully launched Animation Retargeting Tool")
+            except Exception as e:
+                print(f"// Error launching tool with parameters: {str(e)}")
+                print("// Falling back to basic start() method")
+                
+                try:
+                    # Most basic call - no parameters
+                    animation_retargeting_tool.start()
+                    print("// Tool launched without parameters - preset selection may not work")
+                except Exception as inner_e:
+                    print(f"// Critical error launching tool: {str(inner_e)}")
+                    QMessageBox.critical(self, "Error", f"Failed to launch Animation Retargeting Tool: {str(inner_e)}")
+            
+            print("=== ANIMATION RETARGETING ===")
+            print("The tool will:")
+            print("1. Automatically create connections for ALL joints based on preset settings")
+            print("2. Allow you to review and adjust connections if needed")
+            print("3. Bake the animation when you click 'Bake Animation'")
+            print("4. Execute post-bake operations defined in the preset (like rotating S2_Controls)")
+            
+            cmds.refresh()
+            
+            # Note: We no longer wait for the window - the connections are created automatically
+            
+            # Note: Post-bake operations like rotating S2_Controls are now handled
+            # by the animation_retargeting_tool.py via the preset file
+            
+            # Success message
+            QMessageBox.information(self, "Success", 
+                                 "Animation imported successfully. Use the Animation Retargeting Tool to create connections.")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error importing animation: {str(e)}")
+            print(f"// Error importing animation: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+    def get_weapon_id_from_control(self, control_name):
+        """Extract weapon ID from a control name by analyzing namespace or parent structure"""
+        try:
+            # Try to get weapon ID from namespace first
+            if ':' in control_name:
+                namespace = control_name.split(':')[0]
+                # Check if namespace matches a weapon ID pattern
+                for category in self.weapon_categories:
+                    for weapon_id in self.weapons_by_category[category]:
+                        if weapon_id.lower() in namespace.lower():
+                            return weapon_id
+            
+            # If that fails, try to find any parent group that has the weapon ID
+            root_obj = cmds.listRelatives(control_name, parent=True, path=True)
+            while root_obj:
+                root_name = root_obj[0]
+                # Check if name contains a weapon ID
+                for category in self.weapon_categories:
+                    for weapon_id in self.weapons_by_category[category]:
+                        if weapon_id.lower() in root_name.lower():
+                            return weapon_id
+                            
+                # Go up one level
+                root_obj = cmds.listRelatives(root_name, parent=True, path=True)
+                
+            # If no match found, extract from the most likely weapon controls group
+            controls_group = None
+            if cmds.objExists("S2_Controls"):
+                controls_group = "S2_Controls"
+            elif cmds.objExists("*:S2_Controls"):
+                controls_group_results = cmds.ls("*:S2_Controls")
+                if controls_group_results:
+                    controls_group = controls_group_results[0]
+                    
+            if controls_group:
+                # Check if any weapon ID is in the control group's name
+                for category in self.weapon_categories:
+                    for weapon_id in self.weapons_by_category[category]:
+                        if weapon_id.lower() in controls_group.lower():
+                            return weapon_id
+        except:
+            pass
+            
+        # Default to "ak74" if we can't identify the weapon
+        return "ak74"
+        
+    def load_weapon_retarget_preset(self, weapon_id):
+        """
+        Load weapon-specific retargeting settings from preset file
+        
+        The file can be either JSON or simple text format, and should be located in 
+        the weapon's directory, named <weapon_id>_retarget.json or .txt
+        """
+        retarget_settings = {}
+        
+        try:
+            # Find the weapon directory
+            weapon_path = None
+            
+            # Try direct lookup in the category lists if available
+            if hasattr(self, 'weapon_categories') and hasattr(self, 'category_folders'):
+                for category in self.weapon_categories:
+                    if category == "All Weapons" or category not in self.category_folders:
+                        continue
+                        
+                    # Check if weapon is in this category
+                    weapon_ids = [w[1] for w in self.weapon_categories[category]]
+                    if weapon_id in weapon_ids:
+                        category_folder = self.category_folders.get(category, "")
+                        if category_folder:
+                            weapon_path = os.path.join(self.master_path, "Source", "Weapons", category_folder, weapon_id)
+                            break
+            
+            # If not found through direct lookup, search for it
+            if not weapon_path:
+                weapon_path = self.find_weapon_path_by_id(weapon_id)
+            
+            if not weapon_path or not os.path.isdir(weapon_path):
+                print(f"// Warning: Could not find directory for weapon {weapon_id}")
+                return self.get_default_retarget_settings(weapon_id)
+            
+            # Look for retarget preset files
+            json_preset = os.path.join(weapon_path, f"{weapon_id}_retarget.json")
+            txt_preset = os.path.join(weapon_path, f"{weapon_id}_retarget.txt")
+            
+            if os.path.exists(json_preset):
+                # Parse JSON preset
+                with open(json_preset, 'r') as f:
+                    import json
+                    retarget_settings = json.load(f)
+                print(f"// Loaded retargeting preset from {json_preset}")
+                
+            elif os.path.exists(txt_preset):
+                # Parse simple text preset
+                with open(txt_preset, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):  # Skip empty lines and comments
+                            parts = line.split(',')
+                            if len(parts) >= 2:
+                                joint_name = parts[0].strip()
+                                settings = {}
+                                
+                                # Parse settings
+                                for setting in parts[1:]:
+                                    setting = setting.strip()
+                                    if setting.startswith("align_position="):
+                                        value = setting[len("align_position="):].lower()
+                                        settings["align_position"] = (value == "true")
+                                    elif setting.startswith("rotate="):
+                                        rotate_str = setting[len("rotate="):]
+                                        rotate_vals = [float(x) for x in rotate_str.strip('()').split()]
+                                        if len(rotate_vals) == 3:
+                                            settings["rotate"] = rotate_vals
+                                
+                                retarget_settings[joint_name] = settings
+                                print(f"// Loaded retargeting preset from {txt_preset}")
+            else:
+                print(f"// No retargeting preset found for {weapon_id}, using defaults")
+                return self.get_default_retarget_settings(weapon_id)
+        except Exception as e:
+            print(f"// Error loading retargeting preset for {weapon_id}: {str(e)}")
+            return self.get_default_retarget_settings(weapon_id)
+            
+        return retarget_settings
+    
+    def get_default_retarget_settings(self, weapon_id):
+        """Return default retargeting settings for a given weapon ID"""
+        # Default settings with known special cases for specific weapons
+        special_settings = {}
+        
+        # AK-74 specific settings
+        if weapon_id == "ak74":
+            special_settings = {
+                "jnt_magazine1": {"align_position": True, "rotate": [0, 0, -90]},
+                "jnt_shutter": {"align_position": False}
+            }
+        
+        # Return the special settings - all other joints will use default values
+        # (align_position=True, no rotation) which are applied in animation_retargeting_tool.py
+        return special_settings
+    
+    # attach_to_character_rig functionality is now handled directly in the load_animation method
+    
+    def find_weapon_path_by_id(self, weapon_id):
+        """Find the path to a weapon directory by its ID"""
+        # Search all categories
+        for category in self.weapon_categories:
+            category_dir = os.path.join(self.master_path, category)
+            if os.path.isdir(category_dir):
+                # Check if weapon directory exists directly
+                weapon_dir = os.path.join(category_dir, weapon_id)
+                if os.path.isdir(weapon_dir):
+                    return weapon_dir
+                
+                # If not, search subdirectories for a match
+                for subdir in os.listdir(category_dir):
+                    subdir_path = os.path.join(category_dir, subdir)
+                    if os.path.isdir(subdir_path) and weapon_id.lower() in subdir.lower():
+                        return subdir_path
+        
+        return None
     
     def refresh_all_data(self):
         """Refresh weapon data and reload configs"""

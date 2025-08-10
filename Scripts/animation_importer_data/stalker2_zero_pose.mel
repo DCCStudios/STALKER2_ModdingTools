@@ -1,0 +1,1013 @@
+// STALKER2 Skeleton Zero Pose Script
+// Generated automatically from reference pose
+// Run this to set skeleton to neutral pose on frame -1
+
+global proc stalker2ZeroPose()
+{
+    // Set timeline to frame -1
+    currentTime -1;
+    
+    // Apply reference pose transforms
+    
+    // jnt_root
+    if (`objExists "jnt_root"`)
+    {
+        setAttr "jnt_root.translate" 0.0 0.0 0.0;
+        setAttr "jnt_root.rotate" 0.0 0.0 0.0;
+        setAttr "jnt_root.jointOrient" -90.0 0.0 0.0;
+        setAttr "jnt_root.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_hips
+    if (`objExists "jnt_hips"`)
+    {
+        setAttr "jnt_hips.translate" -6.48 0.0 91.149;
+        setAttr "jnt_hips.rotate" -90.0 -90.0 0.0;
+        setAttr "jnt_hips.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_hips.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_spine_01
+    if (`objExists "jnt_spine_01"`)
+    {
+        setAttr "jnt_spine_01.translate" 11.577 -0.056 0.0;
+        setAttr "jnt_spine_01.rotate" 0.0 0.0 0.3;
+        setAttr "jnt_spine_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_spine_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_spine_02
+    if (`objExists "jnt_spine_02"`)
+    {
+        setAttr "jnt_spine_02.translate" 13.98 0.0 0.0;
+        setAttr "jnt_spine_02.rotate" 0.0 0.0 -4.7;
+        setAttr "jnt_spine_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_spine_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_spine_03
+    if (`objExists "jnt_spine_03"`)
+    {
+        setAttr "jnt_spine_03.translate" 14.646 -0.0 0.0;
+        setAttr "jnt_spine_03.rotate" 0.0 0.0 -0.293;
+        setAttr "jnt_spine_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_spine_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_neck
+    if (`objExists "jnt_neck"`)
+    {
+        setAttr "jnt_neck.translate" 25.513 0.0 0.0;
+        setAttr "jnt_neck.rotate" 0.0 0.0 24.485;
+        setAttr "jnt_neck.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_neck.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_head
+    if (`objExists "jnt_head"`)
+    {
+        setAttr "jnt_head.translate" 6.388 0.0 0.0;
+        setAttr "jnt_head.rotate" -0.0 -0.0 -19.677;
+        setAttr "jnt_head.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_head.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_shoulder
+    if (`objExists "jnt_r_shoulder"`)
+    {
+        setAttr "jnt_r_shoulder.translate" 15.96 -3.206 -6.453;
+        setAttr "jnt_r_shoulder.rotate" 38.787 83.444 -136.404;
+        setAttr "jnt_r_shoulder.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_shoulder.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_arm
+    if (`objExists "jnt_r_arm"`)
+    {
+        setAttr "jnt_r_arm.translate" 12.656 -0.0 0.0;
+        setAttr "jnt_r_arm.rotate" -72.355 -46.648 -7.451;
+        setAttr "jnt_r_arm.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_arm.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_fore_arm
+    if (`objExists "jnt_r_fore_arm"`)
+    {
+        setAttr "jnt_r_fore_arm.translate" 24.821 -0.0 0.0;
+        setAttr "jnt_r_fore_arm.rotate" -0.0 34.913 -0.0;
+        setAttr "jnt_r_fore_arm.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand
+    if (`objExists "jnt_r_hand"`)
+    {
+        setAttr "jnt_r_hand.translate" 27.539 0.0 -0.0;
+        setAttr "jnt_r_hand.rotate" 15.365 -0.181 5.788;
+        setAttr "jnt_r_hand.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_thumb_01
+    if (`objExists "jnt_r_hand_thumb_01"`)
+    {
+        setAttr "jnt_r_hand_thumb_01.translate" 1.772 -0.92 -2.599;
+        setAttr "jnt_r_hand_thumb_01.rotate" -64.815 43.271 -6.38;
+        setAttr "jnt_r_hand_thumb_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_thumb_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_thumb_02
+    if (`objExists "jnt_r_hand_thumb_02"`)
+    {
+        setAttr "jnt_r_hand_thumb_02.translate" 4.571 0.0 -0.0;
+        setAttr "jnt_r_hand_thumb_02.rotate" 12.781 8.675 -10.652;
+        setAttr "jnt_r_hand_thumb_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_thumb_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_thumb_03
+    if (`objExists "jnt_r_hand_thumb_03"`)
+    {
+        setAttr "jnt_r_hand_thumb_03.translate" 3.458 0.0 0.0;
+        setAttr "jnt_r_hand_thumb_03.rotate" -0.0 -0.0 19.589;
+        setAttr "jnt_r_hand_thumb_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_thumb_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_index_meta
+    if (`objExists "jnt_r_hand_index_meta"`)
+    {
+        setAttr "jnt_r_hand_index_meta.translate" 3.44 0.334 -2.615;
+        setAttr "jnt_r_hand_index_meta.rotate" -4.177 4.726 11.135;
+        setAttr "jnt_r_hand_index_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_index_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_index_01
+    if (`objExists "jnt_r_hand_index_01"`)
+    {
+        setAttr "jnt_r_hand_index_01.translate" 5.76 0.0 0.0;
+        setAttr "jnt_r_hand_index_01.rotate" -0.027 -0.852 3.181;
+        setAttr "jnt_r_hand_index_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_index_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_index_02
+    if (`objExists "jnt_r_hand_index_02"`)
+    {
+        setAttr "jnt_r_hand_index_02.translate" 4.0 -0.0 -0.0;
+        setAttr "jnt_r_hand_index_02.rotate" 0.0 0.0 -2.038;
+        setAttr "jnt_r_hand_index_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_index_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_index_03
+    if (`objExists "jnt_r_hand_index_03"`)
+    {
+        setAttr "jnt_r_hand_index_03.translate" 2.339 0.0 -0.0;
+        setAttr "jnt_r_hand_index_03.rotate" -0.0 -0.0 0.988;
+        setAttr "jnt_r_hand_index_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_index_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_middle_meta
+    if (`objExists "jnt_r_hand_middle_meta"`)
+    {
+        setAttr "jnt_r_hand_middle_meta.translate" 3.212 0.148 -1.086;
+        setAttr "jnt_r_hand_middle_meta.rotate" 6.285 -2.72 11.44;
+        setAttr "jnt_r_hand_middle_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_middle_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_middle_01
+    if (`objExists "jnt_r_hand_middle_01"`)
+    {
+        setAttr "jnt_r_hand_middle_01.translate" 5.997 -0.0 0.0;
+        setAttr "jnt_r_hand_middle_01.rotate" 0.011 -1.787 -1.259;
+        setAttr "jnt_r_hand_middle_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_middle_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_middle_02
+    if (`objExists "jnt_r_hand_middle_02"`)
+    {
+        setAttr "jnt_r_hand_middle_02.translate" 4.37 -0.0 -0.0;
+        setAttr "jnt_r_hand_middle_02.rotate" -0.0 0.0 -7.898;
+        setAttr "jnt_r_hand_middle_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_middle_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_middle_03
+    if (`objExists "jnt_r_hand_middle_03"`)
+    {
+        setAttr "jnt_r_hand_middle_03.translate" 2.802 0.0 -0.0;
+        setAttr "jnt_r_hand_middle_03.rotate" -0.0 -0.0 5.159;
+        setAttr "jnt_r_hand_middle_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_middle_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_ring_meta
+    if (`objExists "jnt_r_hand_ring_meta"`)
+    {
+        setAttr "jnt_r_hand_ring_meta.translate" 2.913 -0.215 0.291;
+        setAttr "jnt_r_hand_ring_meta.rotate" 10.458 -8.251 8.377;
+        setAttr "jnt_r_hand_ring_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_ring_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_ring_01
+    if (`objExists "jnt_r_hand_ring_01"`)
+    {
+        setAttr "jnt_r_hand_ring_01.translate" 5.997 -0.0 0.0;
+        setAttr "jnt_r_hand_ring_01.rotate" -0.324 -5.056 -2.544;
+        setAttr "jnt_r_hand_ring_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_ring_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_ring_02
+    if (`objExists "jnt_r_hand_ring_02"`)
+    {
+        setAttr "jnt_r_hand_ring_02.translate" 3.975 0.0 -0.0;
+        setAttr "jnt_r_hand_ring_02.rotate" 0.0 0.0 -5.866;
+        setAttr "jnt_r_hand_ring_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_ring_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_ring_03
+    if (`objExists "jnt_r_hand_ring_03"`)
+    {
+        setAttr "jnt_r_hand_ring_03.translate" 2.591 -0.0 -0.0;
+        setAttr "jnt_r_hand_ring_03.rotate" -0.0 -0.0 2.658;
+        setAttr "jnt_r_hand_ring_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_ring_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_pinky_meta
+    if (`objExists "jnt_r_hand_pinky_meta"`)
+    {
+        setAttr "jnt_r_hand_pinky_meta.translate" 2.982 -0.649 1.9;
+        setAttr "jnt_r_hand_pinky_meta.rotate" 22.743 -17.015 2.863;
+        setAttr "jnt_r_hand_pinky_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_pinky_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_pinky_01
+    if (`objExists "jnt_r_hand_pinky_01"`)
+    {
+        setAttr "jnt_r_hand_pinky_01.translate" 5.54 -0.0 0.0;
+        setAttr "jnt_r_hand_pinky_01.rotate" 0.014 -0.943 -6.755;
+        setAttr "jnt_r_hand_pinky_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_pinky_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_pinky_02
+    if (`objExists "jnt_r_hand_pinky_02"`)
+    {
+        setAttr "jnt_r_hand_pinky_02.translate" 3.169 -0.0 -0.0;
+        setAttr "jnt_r_hand_pinky_02.rotate" -0.0 0.0 4.758;
+        setAttr "jnt_r_hand_pinky_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_pinky_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_hand_pinky_03
+    if (`objExists "jnt_r_hand_pinky_03"`)
+    {
+        setAttr "jnt_r_hand_pinky_03.translate" 1.707 0.0 0.0;
+        setAttr "jnt_r_hand_pinky_03.rotate" 0.0 0.0 -1.363;
+        setAttr "jnt_r_hand_pinky_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_hand_pinky_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_weapon
+    if (`objExists "jnt_r_weapon"`)
+    {
+        setAttr "jnt_r_weapon.translate" 0.012 -0.0 0.0;
+        setAttr "jnt_r_weapon.rotate" 0.003 0.034 -0.011;
+        setAttr "jnt_r_weapon.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_weapon.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_fore_arm_roll
+    if (`objExists "jnt_r_fore_arm_roll"`)
+    {
+        setAttr "jnt_r_fore_arm_roll.translate" 10.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm_roll.rotate" 0.0 0.0 -0.0;
+        setAttr "jnt_r_fore_arm_roll.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm_roll.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_fore_arm_down
+    if (`objExists "jnt_r_fore_arm_down"`)
+    {
+        setAttr "jnt_r_fore_arm_down.translate" 18.609 -3.984 -0.752;
+        setAttr "jnt_r_fore_arm_down.rotate" -164.95 3.497 -5.622;
+        setAttr "jnt_r_fore_arm_down.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm_down.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_fore_arm_left
+    if (`objExists "jnt_r_fore_arm_left"`)
+    {
+        setAttr "jnt_r_fore_arm_left.translate" 18.125 0.618 -4.774;
+        setAttr "jnt_r_fore_arm_left.rotate" -80.401 13.448 8.271;
+        setAttr "jnt_r_fore_arm_left.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm_left.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_fore_arm_up
+    if (`objExists "jnt_r_fore_arm_up"`)
+    {
+        setAttr "jnt_r_fore_arm_up.translate" 19.105 3.223 1.59;
+        setAttr "jnt_r_fore_arm_up.rotate" 22.311 2.998 12.243;
+        setAttr "jnt_r_fore_arm_up.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm_up.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_fore_arm_right
+    if (`objExists "jnt_r_fore_arm_right"`)
+    {
+        setAttr "jnt_r_fore_arm_right.translate" 19.211 -1.127 4.216;
+        setAttr "jnt_r_fore_arm_right.rotate" 111.936 -3.186 -0.822;
+        setAttr "jnt_r_fore_arm_right.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_fore_arm_right.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_elbow
+    if (`objExists "jnt_r_elbow"`)
+    {
+        setAttr "jnt_r_elbow.translate" 0.0 0.0 2.0;
+        setAttr "jnt_r_elbow.rotate" 0.0 0.0 -0.0;
+        setAttr "jnt_r_elbow.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_elbow.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_arm_roll
+    if (`objExists "jnt_r_arm_roll"`)
+    {
+        setAttr "jnt_r_arm_roll.translate" 0.0 0.539 0.0;
+        setAttr "jnt_r_arm_roll.rotate" 0.0 0.0 0.0;
+        setAttr "jnt_r_arm_roll.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_arm_roll.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_shoulder_armor
+    if (`objExists "jnt_r_shoulder_armor"`)
+    {
+        setAttr "jnt_r_shoulder_armor.translate" 10.0 0.0 -0.0;
+        setAttr "jnt_r_shoulder_armor.rotate" 0.0 0.0 -0.0;
+        setAttr "jnt_r_shoulder_armor.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_shoulder_armor.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_armor
+    if (`objExists "jnt_r_armor"`)
+    {
+        setAttr "jnt_r_armor.translate" 14.791 0.025 -4.781;
+        setAttr "jnt_r_armor.rotate" 0.0 0.0 -0.0;
+        setAttr "jnt_r_armor.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_armor.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_shoulder
+    if (`objExists "jnt_l_shoulder"`)
+    {
+        setAttr "jnt_l_shoulder.translate" 15.959 -3.206 6.452;
+        setAttr "jnt_l_shoulder.rotate" 38.787 83.444 43.596;
+        setAttr "jnt_l_shoulder.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_shoulder.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_arm
+    if (`objExists "jnt_l_arm"`)
+    {
+        setAttr "jnt_l_arm.translate" -12.656 -0.0 0.0;
+        setAttr "jnt_l_arm.rotate" -72.278 -46.602 -7.482;
+        setAttr "jnt_l_arm.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_arm.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_fore_arm
+    if (`objExists "jnt_l_fore_arm"`)
+    {
+        setAttr "jnt_l_fore_arm.translate" -24.821 0.0 0.0;
+        setAttr "jnt_l_fore_arm.rotate" 0.0 35.194 0.0;
+        setAttr "jnt_l_fore_arm.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_fore_arm.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand
+    if (`objExists "jnt_l_hand"`)
+    {
+        setAttr "jnt_l_hand.translate" -27.539 0.0 -0.0;
+        setAttr "jnt_l_hand.rotate" 15.313 -0.456 5.724;
+        setAttr "jnt_l_hand.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_thumb_01
+    if (`objExists "jnt_l_hand_thumb_01"`)
+    {
+        setAttr "jnt_l_hand_thumb_01.translate" -1.773 0.92 2.598;
+        setAttr "jnt_l_hand_thumb_01.rotate" -64.813 43.237 -6.368;
+        setAttr "jnt_l_hand_thumb_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_thumb_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_thumb_02
+    if (`objExists "jnt_l_hand_thumb_02"`)
+    {
+        setAttr "jnt_l_hand_thumb_02.translate" -4.571 0.0 -0.0;
+        setAttr "jnt_l_hand_thumb_02.rotate" 5.623 1.282 -11.885;
+        setAttr "jnt_l_hand_thumb_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_thumb_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_thumb_03
+    if (`objExists "jnt_l_hand_thumb_03"`)
+    {
+        setAttr "jnt_l_hand_thumb_03.translate" -3.458 -0.0 -0.0;
+        setAttr "jnt_l_hand_thumb_03.rotate" -0.187 5.173 19.589;
+        setAttr "jnt_l_hand_thumb_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_thumb_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_index_meta
+    if (`objExists "jnt_l_hand_index_meta"`)
+    {
+        setAttr "jnt_l_hand_index_meta.translate" -3.441 -0.334 2.613;
+        setAttr "jnt_l_hand_index_meta.rotate" -4.139 3.129 11.654;
+        setAttr "jnt_l_hand_index_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_index_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_index_01
+    if (`objExists "jnt_l_hand_index_01"`)
+    {
+        setAttr "jnt_l_hand_index_01.translate" -5.76 -0.0 0.0;
+        setAttr "jnt_l_hand_index_01.rotate" 0.0 0.0 5.99;
+        setAttr "jnt_l_hand_index_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_index_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_index_02
+    if (`objExists "jnt_l_hand_index_02"`)
+    {
+        setAttr "jnt_l_hand_index_02.translate" -4.0 0.0 -0.0;
+        setAttr "jnt_l_hand_index_02.rotate" 0.0 0.0 -10.675;
+        setAttr "jnt_l_hand_index_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_index_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_index_03
+    if (`objExists "jnt_l_hand_index_03"`)
+    {
+        setAttr "jnt_l_hand_index_03.translate" -2.339 -0.0 0.0;
+        setAttr "jnt_l_hand_index_03.rotate" 0.0 0.0 0.988;
+        setAttr "jnt_l_hand_index_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_index_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_middle_meta
+    if (`objExists "jnt_l_hand_middle_meta"`)
+    {
+        setAttr "jnt_l_hand_middle_meta.translate" -3.212 -0.149 1.084;
+        setAttr "jnt_l_hand_middle_meta.rotate" 6.283 -3.884 11.327;
+        setAttr "jnt_l_hand_middle_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_middle_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_middle_01
+    if (`objExists "jnt_l_hand_middle_01"`)
+    {
+        setAttr "jnt_l_hand_middle_01.translate" -5.997 0.0 -0.0;
+        setAttr "jnt_l_hand_middle_01.rotate" -0.011 -1.4 -1.259;
+        setAttr "jnt_l_hand_middle_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_middle_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_middle_02
+    if (`objExists "jnt_l_hand_middle_02"`)
+    {
+        setAttr "jnt_l_hand_middle_02.translate" -4.37 -0.0 0.0;
+        setAttr "jnt_l_hand_middle_02.rotate" 0.0 0.0 -7.898;
+        setAttr "jnt_l_hand_middle_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_middle_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_middle_03
+    if (`objExists "jnt_l_hand_middle_03"`)
+    {
+        setAttr "jnt_l_hand_middle_03.translate" -2.802 0.0 -0.0;
+        setAttr "jnt_l_hand_middle_03.rotate" -0.0 0.0 5.159;
+        setAttr "jnt_l_hand_middle_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_middle_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_ring_meta
+    if (`objExists "jnt_l_hand_ring_meta"`)
+    {
+        setAttr "jnt_l_hand_ring_meta.translate" -2.913 0.215 -0.293;
+        setAttr "jnt_l_hand_ring_meta.rotate" 10.508 -10.208 8.029;
+        setAttr "jnt_l_hand_ring_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_ring_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_ring_01
+    if (`objExists "jnt_l_hand_ring_01"`)
+    {
+        setAttr "jnt_l_hand_ring_01.translate" -5.997 -0.0 0.0;
+        setAttr "jnt_l_hand_ring_01.rotate" -0.0 -2.519 -2.544;
+        setAttr "jnt_l_hand_ring_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_ring_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_ring_02
+    if (`objExists "jnt_l_hand_ring_02"`)
+    {
+        setAttr "jnt_l_hand_ring_02.translate" -3.975 0.0 -0.0;
+        setAttr "jnt_l_hand_ring_02.rotate" 0.0 0.0 -5.867;
+        setAttr "jnt_l_hand_ring_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_ring_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_ring_03
+    if (`objExists "jnt_l_hand_ring_03"`)
+    {
+        setAttr "jnt_l_hand_ring_03.translate" -2.591 -0.0 -0.001;
+        setAttr "jnt_l_hand_ring_03.rotate" -0.0 -0.0 2.658;
+        setAttr "jnt_l_hand_ring_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_ring_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_pinky_meta
+    if (`objExists "jnt_l_hand_pinky_meta"`)
+    {
+        setAttr "jnt_l_hand_pinky_meta.translate" -2.981 0.648 -1.901;
+        setAttr "jnt_l_hand_pinky_meta.rotate" 22.881 -18.117 2.405;
+        setAttr "jnt_l_hand_pinky_meta.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_pinky_meta.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_pinky_01
+    if (`objExists "jnt_l_hand_pinky_01"`)
+    {
+        setAttr "jnt_l_hand_pinky_01.translate" -5.541 0.0 -0.0;
+        setAttr "jnt_l_hand_pinky_01.rotate" -0.0 0.0 -5.92;
+        setAttr "jnt_l_hand_pinky_01.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_pinky_01.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_pinky_02
+    if (`objExists "jnt_l_hand_pinky_02"`)
+    {
+        setAttr "jnt_l_hand_pinky_02.translate" -3.17 -0.0 -0.0;
+        setAttr "jnt_l_hand_pinky_02.rotate" 0.0 0.0 4.758;
+        setAttr "jnt_l_hand_pinky_02.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_pinky_02.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hand_pinky_03
+    if (`objExists "jnt_l_hand_pinky_03"`)
+    {
+        setAttr "jnt_l_hand_pinky_03.translate" -1.707 0.0 0.0;
+        setAttr "jnt_l_hand_pinky_03.rotate" -0.0 0.0 -1.363;
+        setAttr "jnt_l_hand_pinky_03.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hand_pinky_03.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_weapon
+    if (`objExists "jnt_l_weapon"`)
+    {
+        setAttr "jnt_l_weapon.translate" 0.0 0.0 -0.17;
+        setAttr "jnt_l_weapon.rotate" 0.0 0.0 0.0;
+        setAttr "jnt_l_weapon.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_weapon.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_fore_arm_roll
+    if (`objExists "jnt_l_fore_arm_roll"`)
+    {
+        setAttr "jnt_l_fore_arm_roll.translate" -10.0 0.0 -0.0;
+        setAttr "jnt_l_fore_arm_roll.rotate" -0.011 0.0 0.0;
+        setAttr "jnt_l_fore_arm_roll.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_fore_arm_roll.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_fore_arm_down
+    if (`objExists "jnt_l_fore_arm_down"`)
+    {
+        setAttr "jnt_l_fore_arm_down.translate" -18.599 4.032 0.579;
+        setAttr "jnt_l_fore_arm_down.rotate" -164.982 3.178 -5.686;
+        setAttr "jnt_l_fore_arm_down.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_fore_arm_down.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_fore_arm_left
+    if (`objExists "jnt_l_fore_arm_left"`)
+    {
+        setAttr "jnt_l_fore_arm_left.translate" -18.143 -0.566 4.607;
+        setAttr "jnt_l_fore_arm_left.rotate" -80.512 13.145 8.183;
+        setAttr "jnt_l_fore_arm_left.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_fore_arm_left.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_fore_arm_up
+    if (`objExists "jnt_l_fore_arm_up"`)
+    {
+        setAttr "jnt_l_fore_arm_up.translate" -19.091 -3.177 -1.758;
+        setAttr "jnt_l_fore_arm_up.rotate" 22.182 2.704 12.175;
+        setAttr "jnt_l_fore_arm_up.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_fore_arm_up.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_fore_arm_right
+    if (`objExists "jnt_l_fore_arm_right"`)
+    {
+        setAttr "jnt_l_fore_arm_right.translate" -19.178 1.171 -4.391;
+        setAttr "jnt_l_fore_arm_right.rotate" 111.877 -3.502 -0.881;
+        setAttr "jnt_l_fore_arm_right.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_fore_arm_right.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_elbow
+    if (`objExists "jnt_l_elbow"`)
+    {
+        setAttr "jnt_l_elbow.translate" -0.0 0.0 -2.0;
+        setAttr "jnt_l_elbow.rotate" 0.0 -0.0 0.0;
+        setAttr "jnt_l_elbow.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_elbow.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_arm_roll
+    if (`objExists "jnt_l_arm_roll"`)
+    {
+        setAttr "jnt_l_arm_roll.translate" 0.0 -0.539 0.0;
+        setAttr "jnt_l_arm_roll.rotate" 0.0 0.0 0.0;
+        setAttr "jnt_l_arm_roll.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_arm_roll.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_shoulder_armor
+    if (`objExists "jnt_l_shoulder_armor"`)
+    {
+        setAttr "jnt_l_shoulder_armor.translate" -10.0 0.0 0.0;
+        setAttr "jnt_l_shoulder_armor.rotate" 0.0 0.0 0.0;
+        setAttr "jnt_l_shoulder_armor.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_shoulder_armor.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_armor
+    if (`objExists "jnt_l_armor"`)
+    {
+        setAttr "jnt_l_armor.translate" -14.791 -0.025 4.781;
+        setAttr "jnt_l_armor.rotate" 0.0 0.0 0.0;
+        setAttr "jnt_l_armor.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_armor.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_f_spine_bag
+    if (`objExists "jnt_f_spine_bag"`)
+    {
+        setAttr "jnt_f_spine_bag.translate" 1.401 14.295 0.0;
+        setAttr "jnt_f_spine_bag.rotate" -180.0 -0.0 90.0;
+        setAttr "jnt_f_spine_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_f_spine_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_b_spine_bag
+    if (`objExists "jnt_b_spine_bag"`)
+    {
+        setAttr "jnt_b_spine_bag.translate" 15.191 -13.848 -0.0;
+        setAttr "jnt_b_spine_bag.rotate" -0.0 0.0 -90.0;
+        setAttr "jnt_b_spine_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_b_spine_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_up_leg
+    if (`objExists "jnt_r_up_leg"`)
+    {
+        setAttr "jnt_r_up_leg.translate" -1.076 0.086 -9.918;
+        setAttr "jnt_r_up_leg.rotate" 89.866 7.525 179.019;
+        setAttr "jnt_r_up_leg.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_up_leg.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_leg
+    if (`objExists "jnt_r_leg"`)
+    {
+        setAttr "jnt_r_leg.translate" 35.389 0.0 -0.0;
+        setAttr "jnt_r_leg.rotate" 0.0 7.167 0.0;
+        setAttr "jnt_r_leg.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_leg.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_foot
+    if (`objExists "jnt_r_foot"`)
+    {
+        setAttr "jnt_r_foot.translate" 45.559 0.0 0.0;
+        setAttr "jnt_r_foot.rotate" 15.201 -6.327 7.573;
+        setAttr "jnt_r_foot.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_foot.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_toe_base
+    if (`objExists "jnt_r_toe_base"`)
+    {
+        setAttr "jnt_r_toe_base.translate" 7.124 -0.0 14.796;
+        setAttr "jnt_r_toe_base.rotate" -1.371 0.001 0.004;
+        setAttr "jnt_r_toe_base.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_toe_base.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_knee
+    if (`objExists "jnt_r_knee"`)
+    {
+        setAttr "jnt_r_knee.translate" 0.0 0.016 7.012;
+        setAttr "jnt_r_knee.rotate" -0.071 0.012 0.003;
+        setAttr "jnt_r_knee.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_knee.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_up_leg_roll
+    if (`objExists "jnt_r_up_leg_roll"`)
+    {
+        setAttr "jnt_r_up_leg_roll.translate" 2.0 0.0 0.001;
+        setAttr "jnt_r_up_leg_roll.rotate" -0.07 -0.019 0.012;
+        setAttr "jnt_r_up_leg_roll.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_up_leg_roll.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_leg_bag
+    if (`objExists "jnt_r_leg_bag"`)
+    {
+        setAttr "jnt_r_leg_bag.translate" 0.002 -10.025 0.012;
+        setAttr "jnt_r_leg_bag.rotate" 0.019 -0.07 -89.988;
+        setAttr "jnt_r_leg_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_leg_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_up_leg
+    if (`objExists "jnt_l_up_leg"`)
+    {
+        setAttr "jnt_l_up_leg.translate" -1.076 0.086 9.918;
+        setAttr "jnt_l_up_leg.rotate" 89.757 7.518 -0.959;
+        setAttr "jnt_l_up_leg.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_up_leg.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_leg
+    if (`objExists "jnt_l_leg"`)
+    {
+        setAttr "jnt_l_leg.translate" -35.389 0.0 0.0;
+        setAttr "jnt_l_leg.rotate" 0.0 7.147 -0.0;
+        setAttr "jnt_l_leg.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_leg.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_foot
+    if (`objExists "jnt_l_foot"`)
+    {
+        setAttr "jnt_l_foot.translate" -45.559 0.0 -0.0;
+        setAttr "jnt_l_foot.rotate" 15.473 -6.343 7.567;
+        setAttr "jnt_l_foot.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_foot.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_toe_base
+    if (`objExists "jnt_l_toe_base"`)
+    {
+        setAttr "jnt_l_toe_base.translate" -7.124 -0.0 -14.796;
+        setAttr "jnt_l_toe_base.rotate" -1.277 0.001 0.004;
+        setAttr "jnt_l_toe_base.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_toe_base.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_knee
+    if (`objExists "jnt_l_knee"`)
+    {
+        setAttr "jnt_l_knee.translate" 0.002 0.002 -7.025;
+        setAttr "jnt_l_knee.rotate" 0.042 0.011 0.01;
+        setAttr "jnt_l_knee.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_knee.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_up_leg_roll
+    if (`objExists "jnt_l_up_leg_roll"`)
+    {
+        setAttr "jnt_l_up_leg_roll.translate" -2.0 -0.0 -0.001;
+        setAttr "jnt_l_up_leg_roll.rotate" 0.043 -0.041 0.005;
+        setAttr "jnt_l_up_leg_roll.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_up_leg_roll.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_leg_bag
+    if (`objExists "jnt_l_leg_bag"`)
+    {
+        setAttr "jnt_l_leg_bag.translate" -0.001 10.025 0.007;
+        setAttr "jnt_l_leg_bag.rotate" -0.041 -0.043 90.005;
+        setAttr "jnt_l_leg_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_leg_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hips_bag2
+    if (`objExists "jnt_l_hips_bag2"`)
+    {
+        setAttr "jnt_l_hips_bag2.translate" 8.849 -0.056 -18.697;
+        setAttr "jnt_l_hips_bag2.rotate" 90.0 90.0 0.0;
+        setAttr "jnt_l_hips_bag2.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hips_bag2.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_hips_bag
+    if (`objExists "jnt_l_hips_bag"`)
+    {
+        setAttr "jnt_l_hips_bag.translate" 8.849 -0.056 18.697;
+        setAttr "jnt_l_hips_bag.rotate" -90.0 -90.0 0.0;
+        setAttr "jnt_l_hips_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_hips_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_f_hips_bag
+    if (`objExists "jnt_f_hips_bag"`)
+    {
+        setAttr "jnt_f_hips_bag.translate" 7.747 13.851 -0.0;
+        setAttr "jnt_f_hips_bag.rotate" -180.0 0.0 90.0;
+        setAttr "jnt_f_hips_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_f_hips_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_b_hips_bag
+    if (`objExists "jnt_b_hips_bag"`)
+    {
+        setAttr "jnt_b_hips_bag.translate" 7.88 -13.833 0.0;
+        setAttr "jnt_b_hips_bag.rotate" -0.0 -0.0 -89.7;
+        setAttr "jnt_b_hips_bag.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_b_hips_bag.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_camera
+    if (`objExists "jnt_camera"`)
+    {
+        setAttr "jnt_camera.translate" 0.0 0.0 0.0;
+        setAttr "jnt_camera.rotate" -0.0 0.0 0.0;
+        setAttr "jnt_camera.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_camera.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_weapon
+    if (`objExists "jnt_weapon"`)
+    {
+        setAttr "jnt_weapon.translate" 0.0 0.0 0.0;
+        setAttr "jnt_weapon.rotate" -0.0 0.0 0.0;
+        setAttr "jnt_weapon.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_weapon.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_ik_hand_root
+    if (`objExists "jnt_ik_hand_root"`)
+    {
+        setAttr "jnt_ik_hand_root.translate" 0.0 0.0 0.0;
+        setAttr "jnt_ik_hand_root.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_ik_hand_root.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_ik_hand_root.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_ik_hand_gun
+    if (`objExists "jnt_ik_hand_gun"`)
+    {
+        setAttr "jnt_ik_hand_gun.translate" 0.0 0.0 0.0;
+        setAttr "jnt_ik_hand_gun.rotate" -90.0 -0.0 0.0;
+        setAttr "jnt_ik_hand_gun.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_ik_hand_gun.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_ik_hand
+    if (`objExists "jnt_r_ik_hand"`)
+    {
+        setAttr "jnt_r_ik_hand.translate" 4.134 -51.192 111.66;
+        setAttr "jnt_r_ik_hand.rotate" 148.906 28.199 -51.074;
+        setAttr "jnt_r_ik_hand.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_ik_hand.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_ik_hand
+    if (`objExists "jnt_l_ik_hand"`)
+    {
+        setAttr "jnt_l_ik_hand.translate" 4.252 51.198 111.782;
+        setAttr "jnt_l_ik_hand.rotate" -31.094 -28.199 -128.926;
+        setAttr "jnt_l_ik_hand.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_ik_hand.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_ik_foot_root
+    if (`objExists "jnt_ik_foot_root"`)
+    {
+        setAttr "jnt_ik_foot_root.translate" 0.0 0.0 0.0;
+        setAttr "jnt_ik_foot_root.rotate" -0.0 0.0 0.0;
+        setAttr "jnt_ik_foot_root.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_ik_foot_root.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_r_ik_foot
+    if (`objExists "jnt_r_ik_foot"`)
+    {
+        setAttr "jnt_r_ik_foot.translate" -10.71 -20.486 10.091;
+        setAttr "jnt_r_ik_foot.rotate" 16.054 89.815 0.043;
+        setAttr "jnt_r_ik_foot.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_r_ik_foot.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_l_ik_foot
+    if (`objExists "jnt_l_ik_foot"`)
+    {
+        setAttr "jnt_l_ik_foot.translate" -10.724 20.487 10.091;
+        setAttr "jnt_l_ik_foot.rotate" -163.947 -89.815 -179.883;
+        setAttr "jnt_l_ik_foot.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_l_ik_foot.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_root_weapon
+    if (`objExists "jnt_root_weapon"`)
+    {
+        setAttr "jnt_root_weapon.translate" 0.0 0.0 0.0;
+        setAttr "jnt_root_weapon.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_root_weapon.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_root_weapon.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_second_weapon
+    if (`objExists "jnt_second_weapon"`)
+    {
+        setAttr "jnt_second_weapon.translate" 4.141 51.2 111.654;
+        setAttr "jnt_second_weapon.rotate" -31.094 -28.199 -128.926;
+        setAttr "jnt_second_weapon.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_second_weapon.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_unequipped_weapon
+    if (`objExists "jnt_unequipped_weapon"`)
+    {
+        setAttr "jnt_unequipped_weapon.translate" 0.0 0.0 0.0;
+        setAttr "jnt_unequipped_weapon.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_unequipped_weapon.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_unequipped_weapon.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_item
+    if (`objExists "jnt_item"`)
+    {
+        setAttr "jnt_item.translate" 0.0 0.0 0.0;
+        setAttr "jnt_item.rotate" -0.0 0.0 0.0;
+        setAttr "jnt_item.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_item.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_unequipped_second
+    if (`objExists "jnt_unequipped_second"`)
+    {
+        setAttr "jnt_unequipped_second.translate" 0.0 0.0 0.0;
+        setAttr "jnt_unequipped_second.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_unequipped_second.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_unequipped_second.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_unequipped_item
+    if (`objExists "jnt_unequipped_item"`)
+    {
+        setAttr "jnt_unequipped_item.translate" 0.0 0.0 0.0;
+        setAttr "jnt_unequipped_item.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_unequipped_item.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_unequipped_item.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_additional
+    if (`objExists "jnt_additional"`)
+    {
+        setAttr "jnt_additional.translate" 0.0 0.0 0.0;
+        setAttr "jnt_additional.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_additional.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_additional.scale" 1.0 1.0 1.0;
+    }
+    
+    // jnt_additional_second
+    if (`objExists "jnt_additional_second"`)
+    {
+        setAttr "jnt_additional_second.translate" 0.0 0.0 0.0;
+        setAttr "jnt_additional_second.rotate" 90.0 0.0 0.0;
+        setAttr "jnt_additional_second.jointOrient" 0.0 0.0 0.0;
+        setAttr "jnt_additional_second.scale" 1.0 1.0 1.0;
+    }
+    
+    // Key all transforms on frame -1
+    string $joints[] = `ls -type joint`;
+    select $joints;
+    setKeyframe -time -1 -attribute translate;
+    setKeyframe -time -1 -attribute rotate;
+    select -clear;
+    
+    print "// STALKER2 skeleton set to reference pose on frame -1\n";
+}
+
+// Auto-execute when sourced
+// stalker2ZeroPose();

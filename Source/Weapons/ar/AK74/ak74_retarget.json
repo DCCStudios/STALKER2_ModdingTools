@@ -1,0 +1,44 @@
+{
+    "jnt_wpn_ak74": {
+        "align_position": true
+    },
+    "jnt_bullet": {
+        "align_position": true
+    },
+    "jnt_bullet_shell": {
+        "align_position": true
+    },
+    "jnt_magazine1": {
+        "align_position": true,
+        "rotate": [0, 0, -90]
+    },
+    "jnt_magazine": {
+        "align_position": true
+    },
+    "jnt_magazine_tab": {
+        "align_position": true
+    },
+    "jnt_offset": {
+        "align_position": true
+    },
+    "jnt_ring": {
+        "align_position": true
+    },
+    "jnt_selector_plate": {
+        "align_position": true
+    },
+    "jnt_shutter": {
+        "align_position": false
+    },
+    "jnt_trigger": {
+        "align_position": true
+    },
+    "post_bake_operations": [
+        {
+            "type": "rotate",
+            "object": "S2_Controls",
+            "values": [0, -90, 0],
+            "relative": true
+        }
+    ]
+}

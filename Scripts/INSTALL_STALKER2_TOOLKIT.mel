@@ -8,8 +8,12 @@
 // 4. Install the shelf button
 // 5. Show confirmation
 
+// Define global variables
+global int $animExporterInstalled = 0;
+
 global proc install_stalker2_toolkit_drag_drop()
 {
+    global int $animExporterInstalled;
     print("=== STALKER 2 Toolkit Drag & Drop Installer ===\n");
     
     // Get the directory where this MEL script is located
@@ -43,7 +47,8 @@ global proc install_stalker2_toolkit_drag_drop()
     print("Installer location: " + $scriptDir + "\n");
     
     // Check if current directory contains STALKER 2 Toolkit structure
-    string $requiredFiles[] = {"stalker2_toolkit.py", "material_texture_matcher.py", "weapon_importer.py", "weapon_rig_tool.py", "README_STALKER2_TOOLKIT.md"};
+    string $requiredFiles[] = {"stalker2_toolkit.py", "INSTALL_STALKER2_TOOLKIT.mel"};
+    string $subfolderFiles[] = {"material_texture_matcher.py", "weapon_importer.py", "weapon_rig_tool.py", "PrintSkeletonHierarchy.py", "asAnimationImporter.py", "animation_retargeting_tool.py"};
     
     int $foundFiles = 0;
     
@@ -60,7 +65,7 @@ global proc install_stalker2_toolkit_drag_drop()
     int $hasCustomIcon = `filetest -f $iconPath`;
     
     // Verify we have the required structure
-    if ($foundFiles < 2) {  // At least toolkit and matcher required
+    if ($foundFiles < 2) {  // At least toolkit and installer required
         string $errorMsg = "STALKER 2 Toolkit structure not found!\n\n";
         $errorMsg += "Current location: " + $scriptDir + "\n\n";
         $errorMsg += "Found " + $foundFiles + "/" + size($requiredFiles) + " required files\n\n";
@@ -143,9 +148,46 @@ global proc install_stalker2_toolkit_drag_drop()
            "except Exception as e:\n" +
            "    print('Note: Could not check for existing shelf buttons: ' + str(e))");
     
-    // Copy STALKER 2 Toolkit folder
+    // Create the toolkit directories
     print("Copying STALKER 2 Toolkit to Maya scripts directory...\n");
-    python("import shutil; shutil.copytree(r'" + $toolkitSource + "', r'" + $toolkitTarget + "')");
+    python("import os");
+    python("import shutil");
+    python("source_path = r'" + $toolkitSource + "'");
+    python("target_path = r'" + $toolkitTarget + "'");
+    
+    // Create directory
+    python("if not os.path.exists(target_path): os.makedirs(target_path)");
+    
+    // Define all files to copy
+    python("all_files = ['stalker2_toolkit.py', 'INSTALL_STALKER2_TOOLKIT.mel', 'STAT_Icon.png', 'material_texture_matcher.py', 'weapon_importer.py', 'weapon_rig_tool.py', 'PrintSkeletonHierarchy.py', 'asAnimationImporter.py', 'animation_retargeting_tool.py']");
+    
+    // Copy animation_importer_data and hax_exporter_data to Maya base scripts directory if they exist
+    python("source_data_dir = os.path.join(source_path, 'animation_importer_data')");
+    python("if os.path.exists(source_data_dir):\n" +
+           "    scripts_dir = cmds.internalVar(userScriptDir=True)\n" +
+           "    target_data_dir = os.path.join(scripts_dir, 'animation_importer_data')\n" +
+           "    if os.path.exists(target_data_dir):\n" +
+           "        shutil.rmtree(target_data_dir)\n" +
+           "    shutil.copytree(source_data_dir, target_data_dir)\n" +
+           "    print('Copied animation_importer_data directory to Maya scripts directory')");
+    
+    python("source_data_dir = os.path.join(source_path, 'hax_exporter_data')");
+    python("if os.path.exists(source_data_dir):\n" +
+           "    scripts_dir = cmds.internalVar(userScriptDir=True)\n" +
+           "    target_data_dir = os.path.join(scripts_dir, 'hax_exporter_data')\n" +
+           "    if os.path.exists(target_data_dir):\n" +
+           "        shutil.rmtree(target_data_dir)\n" +
+           "    shutil.copytree(source_data_dir, target_data_dir)\n" +
+           "    print('Copied hax_exporter_data directory to Maya scripts directory')");
+    
+    // Copy individual files to toolkit directory
+    python("for filename in os.listdir(source_path):\n" +
+           "    source_file = os.path.join(source_path, filename)\n" +
+           "    if os.path.isfile(source_file):\n" +
+           "        if filename in all_files or not filename.endswith('.py'):\n" +
+           "            # Copy to toolkit directory\n" +
+           "            shutil.copy2(source_file, os.path.join(target_path, filename))\n" +
+           "            print('Copied {} to toolkit directory'.format(filename))");
     
     // Verify copy was successful
     if (!`filetest -d $toolkitTarget`) {
@@ -191,7 +233,7 @@ global proc install_stalker2_toolkit_drag_drop()
     python("import sys");
     python("try:\n" +
            "    # Clean reload any existing modules\n" +
-           "    modules_to_reload = ['stalker2_toolkit', 'material_texture_matcher', 'weapon_importer', 'weapon_rig_tool']\n" +
+           "    modules_to_reload = ['stalker2_toolkit', 'stalker2_toolkit.material_texture_matcher', 'stalker2_toolkit.weapon_importer', 'stalker2_toolkit.weapon_rig_tool', 'stalker2_toolkit.PrintSkeletonHierarchy', 'stalker2_toolkit.asAnimationImporter', 'stalker2_toolkit.animation_retargeting_tool', 'animation_retargeting_tool']\n" +
            "    for mod_name in modules_to_reload:\n" +
            "        if mod_name in sys.modules:\n" +
            "            if hasattr(__builtins__, 'reload'):\n" +  // Python 2
@@ -290,13 +332,20 @@ global proc install_stalker2_toolkit_drag_drop()
     print("Available tools:\n");
     print("- Material-Texture Matcher - Automatically assign textures to materials\n");
     print("- Weapon Importer - Import weapon skeletons and constrain meshes to joints\n");
+    print("- Animation Tools - Import animations and generate reference poses\n");
     print("- Future modding tools (coming soon)\n");
     print("\n");
     print("=== TECHNICAL NOTES ===\n");
+    global int $animExporterInstalled;
     print("- Cross-Maya version compatibility (2025+ and earlier)\n");
     print("- Dark mode UI consistent with modern workflows\n");
     print("- Strict name matching to prevent incorrect assignments\n");
     print("- Module auto-reload for development workflow\n");
+    if ($animExporterInstalled) {
+        print("- Animation Exporter installed for enhanced animation workflow\n");
+    } else {
+        print("- Animation Exporter RECOMMENDED for proper animation workflow\n");
+    }
     print("\n");
     print("=== TROUBLESHOOTING ===\n");
     print("If you encounter issues:\n");
@@ -305,6 +354,55 @@ global proc install_stalker2_toolkit_drag_drop()
     print("3. Reinstall using this drag & drop installer\n");
     print("4. Restart Maya if issues persist\n");
     print("\n");
+    
+    // Check for animation exporter installation
+    int $animExporterInstalled = 0;
+    string $animExporterPath = $scriptDir + "/Animation Exporter/InstallHaxGameExporter.py";
+    
+    if (`filetest -f $animExporterPath`) {
+        string $exporterMessage = "HIGHLY RECOMMENDED: Install Animation Exporter\n\n";
+        $exporterMessage += "The Hax Game Exporter is an essential tool for STALKER 2 animation workflow.\n";
+        $exporterMessage += "It's strongly recommended to install this tool for proper animation export.\n\n";
+        $exporterMessage += "Would you like to install the Animation Exporter now?";
+        
+        string $exporterChoice = `confirmDialog -title "STALKER 2 Toolkit - Install Animation Exporter" -message $exporterMessage -button "Yes, Install" -button "Skip" -defaultButton "Yes, Install" -cancelButton "Skip"`;
+        
+        if ($exporterChoice == "Yes, Install") {
+            print("Installing Animation Exporter...\n");
+            
+            // Execute the animation exporter installer using its onMayaDroppedPythonFile function
+            python("import sys, os\n" +
+                   "installer_path = r'" + $animExporterPath + "'\n" +
+                   "if os.path.exists(installer_path):\n" +
+                   "    # First make sure the file can be imported\n" +
+                   "    installer_dir = os.path.dirname(installer_path)\n" +
+                   "    if installer_dir not in sys.path:\n" +
+                   "        sys.path.append(installer_dir)\n" +
+                   "    \n" +
+                   "    # Now execute it\n" +
+                   "    try:\n" +
+                   "        namespace = {}\n" +
+                   "        with open(installer_path, 'r') as f:\n" +
+                   "            code = compile(f.read(), installer_path, 'exec')\n" +
+                   "            exec(code, namespace)\n" +
+                   "        # Call the onMayaDroppedPythonFile function\n" +
+                   "        if 'onMayaDroppedPythonFile' in namespace:\n" +
+                   "            namespace['onMayaDroppedPythonFile'](None)\n" +
+                   "            print('Animation Exporter installation completed')\n" +
+                   "        else:\n" +
+                   "            cmds.warning('Could not find onMayaDroppedPythonFile function in Animation Exporter installer')\n" +
+                   "    except Exception as e:\n" +
+                   "        cmds.warning('Error installing Animation Exporter: ' + str(e))\n" +
+                   "else:\n" +
+                   "    cmds.warning('Animation Exporter installer not found at: ' + installer_path)");
+            
+            $animExporterInstalled = 1;
+        } else {
+            print("Animation Exporter installation skipped by user.\n");
+        }
+    } else {
+        print("Animation Exporter installer not found at: " + $animExporterPath + "\n");
+    }
     
     // Show final success dialog with instructions
     string $finalMessage = "STALKER 2 Toolkit installed successfully!\n\n";
@@ -321,6 +419,8 @@ global proc install_stalker2_toolkit_drag_drop()
         $finalMessage += "import stalker2_toolkit; stalker2_toolkit.show_stalker2_toolkit()\n\n";
     }
     
+    global int $animExporterInstalled;
+    
     $finalMessage += "AVAILABLE TOOLS:\n";
     $finalMessage += "- Material-Texture Matcher\n";
     $finalMessage += "  * Automatically assign textures to materials\n";
@@ -329,12 +429,25 @@ global proc install_stalker2_toolkit_drag_drop()
     $finalMessage += "- Weapon Importer\n";
     $finalMessage += "  * Import weapon skeletons and meshes\n";
     $finalMessage += "  * Automatic joint constraint setup\n";
-    $finalMessage += "  * Supports all weapon categories\n\n";
+    $finalMessage += "  * Supports all weapon categories\n";
+    $finalMessage += "- Animation Tools\n";
+    $finalMessage += "  * Animation Importer for game animations\n";
+    $finalMessage += "  * Print Skeleton Hierarchy for reference poses\n";
+    
+    if ($animExporterInstalled) {
+        $finalMessage += "- Animation Exporter (Installed)\n";
+        $finalMessage += "  * Export animations with proper settings\n";
+        $finalMessage += "  * Manage animation clips and layers\n";
+    } else {
+        $finalMessage += "- Animation Exporter (Not Installed)\n";
+        $finalMessage += "  * HIGHLY RECOMMENDED: Install manually from Animation Exporter folder\n";
+    }
+    $finalMessage += "\n";
     
     $finalMessage += "FUTURE TOOLS:\n";
     $finalMessage += "- UV Tools - UV mapping utilities\n";
     $finalMessage += "- Mesh Utilities - Processing tools\n";
-    $finalMessage += "- Animation Tools - Import/export helpers\n\n";
+    $finalMessage += "- Additional Animation Tools - Import/export helpers\n\n";
     
     $finalMessage += "Need help? Check Script Editor for detailed messages.";
     
@@ -342,6 +455,9 @@ global proc install_stalker2_toolkit_drag_drop()
     string $launchChoice = `confirmDialog -title "STALKER 2 Toolkit - Installation Complete!" -message $finalMessage -button "Launch Toolkit" -button "Close" -defaultButton "Launch Toolkit"`;
     if ($launchChoice == "Launch Toolkit") {
         // Launch the toolkit using the safe launcher
+        python("import sys, os");
+        python("scripts_dir = r'" + $toolkitTarget + "'");
+        python("if scripts_dir not in sys.path: sys.path.insert(0, scripts_dir)");
         python("import stalker2_toolkit; stalker2_toolkit.safe_launch_stalker2_toolkit()");
     }
 }

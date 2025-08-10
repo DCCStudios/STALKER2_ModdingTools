@@ -890,23 +890,23 @@ class WeaponRigToolDialog(QDialog):
         
         print("Found {0} joints in scene".format(len(all_joints)))
         
-        # Look for point and orient constraints
-        all_constraints = cmds.ls(type=['pointConstraint', 'orientConstraint'])
+        # Look for parent and scale constraints
+        all_constraints = cmds.ls(type=['parentConstraint', 'scaleConstraint'])
         
         for constraint in all_constraints:
             try:
                 constraint_type = cmds.objectType(constraint)
                 
                 # Get constraint information using proper Maya constraint queries
-                if constraint_type == 'pointConstraint':
+                if constraint_type == 'parentConstraint':
                     # Get the drivers (source objects) and constrained object
-                    target_list = cmds.pointConstraint(constraint, query=True, targetList=True) or []
-                    weight_alias_list = cmds.pointConstraint(constraint, query=True, weightAliasList=True) or []
+                    target_list = cmds.parentConstraint(constraint, query=True, targetList=True) or []
+                    weight_alias_list = cmds.parentConstraint(constraint, query=True, weightAliasList=True) or []
                     
-                elif constraint_type == 'orientConstraint':
+                elif constraint_type == 'scaleConstraint':
                     # Get the drivers (source objects) and constrained object  
-                    target_list = cmds.orientConstraint(constraint, query=True, targetList=True) or []
-                    weight_alias_list = cmds.orientConstraint(constraint, query=True, weightAliasList=True) or []
+                    target_list = cmds.scaleConstraint(constraint, query=True, targetList=True) or []
+                    weight_alias_list = cmds.scaleConstraint(constraint, query=True, weightAliasList=True) or []
                 else:
                     continue
                 
@@ -1018,9 +1018,9 @@ class WeaponRigToolDialog(QDialog):
         for attachment_obj in attachment_transforms:
             try:
                 # Find constraints on this attachment object
-                point_constraints = cmds.listConnections(attachment_obj, type='pointConstraint') or []
-                orient_constraints = cmds.listConnections(attachment_obj, type='orientConstraint') or []
-                constraints = point_constraints + orient_constraints
+                parent_constraints = cmds.listConnections(attachment_obj, type='parentConstraint') or []
+                scale_constraints = cmds.listConnections(attachment_obj, type='scaleConstraint') or []
+                constraints = parent_constraints + scale_constraints
                 
                 joint_name = None
                 for constraint in constraints:
@@ -1028,10 +1028,10 @@ class WeaponRigToolDialog(QDialog):
                         constraint_type = cmds.objectType(constraint)
                         
                         # Get constraint drivers
-                        if constraint_type == 'pointConstraint':
-                            target_list = cmds.pointConstraint(constraint, query=True, targetList=True) or []
-                        elif constraint_type == 'orientConstraint':
-                            target_list = cmds.orientConstraint(constraint, query=True, targetList=True) or []
+                        if constraint_type == 'parentConstraint':
+                            target_list = cmds.parentConstraint(constraint, query=True, targetList=True) or []
+                        elif constraint_type == 'scaleConstraint':
+                            target_list = cmds.scaleConstraint(constraint, query=True, targetList=True) or []
                         else:
                             continue
                         
@@ -4471,12 +4471,13 @@ class WeaponRigToolDialog(QDialog):
             if (association.has_control and not association.is_excluded and 
                 cmds.objExists(association.control_name) and cmds.objExists(association.joint_name)):
                 try:
-                    # Constrain joint to control with offset maintained (crucial after freezing transforms)
-                    pos_constraint = cmds.pointConstraint(association.control_name, association.joint_name, maintainOffset=True)[0]
-                    rot_constraint = cmds.orientConstraint(association.control_name, association.joint_name, maintainOffset=True)[0]
+                    # Using parent constraint (handles both position and rotation) and scale constraint
+                    # instead of separate point and orient constraints
+                    parent_constraint = cmds.parentConstraint(association.control_name, association.joint_name, maintainOffset=True)[0]
+                    scale_constraint = cmds.scaleConstraint(association.control_name, association.joint_name, maintainOffset=True)[0]
                     
                     constraint_count += 2
-                    print("Constrained joint '{0}' to control '{1}'".format(
+                    print("Constrained joint '{0}' to control '{1}' using parent and scale constraints".format(
                         association.joint_name, association.control_name))
                     
                 except Exception as e:
@@ -4790,17 +4791,17 @@ class WeaponRigToolDialog(QDialog):
                     for transform in all_transforms:
                         if mesh_obj.lower() in transform.lower():
                             # Check if it's constrained to the joint
-                            point_constraints = cmds.listConnections(transform, type='pointConstraint') or []
-                            orient_constraints = cmds.listConnections(transform, type='orientConstraint') or []
-                            constraints = point_constraints + orient_constraints
+                            parent_constraints = cmds.listConnections(transform, type='parentConstraint') or []
+                            scale_constraints = cmds.listConnections(transform, type='scaleConstraint') or []
+                            constraints = parent_constraints + scale_constraints
                             
                             for constraint in constraints:
                                 try:
                                     constraint_type = cmds.objectType(constraint)
-                                    if constraint_type == 'pointConstraint':
-                                        targets = cmds.pointConstraint(constraint, query=True, targetList=True) or []
-                                    elif constraint_type == 'orientConstraint':
-                                        targets = cmds.orientConstraint(constraint, query=True, targetList=True) or []
+                                    if constraint_type == 'parentConstraint':
+                                        targets = cmds.parentConstraint(constraint, query=True, targetList=True) or []
+                                    elif constraint_type == 'scaleConstraint':
+                                        targets = cmds.scaleConstraint(constraint, query=True, targetList=True) or []
                                     else:
                                         continue
                                     
@@ -4825,16 +4826,16 @@ class WeaponRigToolDialog(QDialog):
                         for transform in all_transforms:
                             if mesh_obj.lower() in transform.lower():
                                 # Check if it's constrained to the joint
-                                point_constraints = cmds.listConnections(transform, type='pointConstraint') or []
-                                orient_constraints = cmds.listConnections(transform, type='orientConstraint') or []
-                                constraints = point_constraints + orient_constraints
+                                parent_constraints = cmds.listConnections(transform, type='parentConstraint') or []
+                                scale_constraints = cmds.listConnections(transform, type='scaleConstraint') or []
+                                constraints = parent_constraints + scale_constraints
                                 for constraint in constraints:
                                     try:
                                         constraint_type = cmds.objectType(constraint)
-                                        if constraint_type == 'pointConstraint':
-                                            targets = cmds.pointConstraint(constraint, query=True, targetList=True) or []
-                                        elif constraint_type == 'orientConstraint':
-                                            targets = cmds.orientConstraint(constraint, query=True, targetList=True) or []
+                                        if constraint_type == 'parentConstraint':
+                                            targets = cmds.parentConstraint(constraint, query=True, targetList=True) or []
+                                        elif constraint_type == 'scaleConstraint':
+                                            targets = cmds.scaleConstraint(constraint, query=True, targetList=True) or []
                                         else:
                                             continue
                                         
