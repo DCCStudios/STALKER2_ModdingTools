@@ -6,13 +6,6 @@ A comprehensive collection of tools and rigs for STALKER 2 modding in Autodesk M
 
 A powerful suite of Maya tools designed specifically for STALKER 2 modding workflows with cross-Maya version compatibility and modern UI.
 
-### Key Features
-
-- **Cross-Maya Version Compatibility**: Works with Maya 2025+ (Python 3, PySide6) and earlier versions (Python 2, PySide2)
-- **Dark Mode UI**: Modern interface consistent with STALKER 2 aesthetic
-- **Drag & Drop Installation**: Simple one-click installation process
-- **Custom STALKER 2 Icon**: Professional shelf button with authentic STALKER branding
-
 ### Included Tools
 
 #### Material-Texture Matcher
