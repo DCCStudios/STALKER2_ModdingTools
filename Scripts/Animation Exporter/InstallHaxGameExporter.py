@@ -37,6 +37,16 @@ ICON_FILENAME = "HGE_icon.png"
 
 def onMayaDroppedPythonFile(obj):
     """Required function for Maya drag and drop functionality."""
+    # Force reload of this module if it was already imported
+    import sys
+    module_name = 'InstallHaxGameExporter'
+    if module_name in sys.modules:
+        if sys.version_info[0] >= 3:
+            import importlib
+            importlib.reload(sys.modules[module_name])
+        else:
+            reload(sys.modules[module_name])
+    
     try:
         install_hax_game_exporter()
     except Exception as e:
@@ -47,6 +57,59 @@ def onMayaDroppedPythonFile(obj):
 def install_hax_game_exporter():
     """Install the Hax Game Exporter script to Maya's scripts folder and create a shelf button."""
     try:
+        # Close any open help dialogs to release file locks on GIFs
+        # Do this directly without importing to avoid showing dialogs
+        try:
+            # Try to import PySide
+            try:
+                from PySide6 import QtWidgets
+            except ImportError:
+                try:
+                    from PySide2 import QtWidgets
+                except ImportError:
+                    QtWidgets = None
+            
+            if QtWidgets:
+                app = QtWidgets.QApplication.instance()
+                if app:
+                    dialogs_to_close = []
+                    
+                    # Find all help dialogs
+                    for widget in app.allWidgets():
+                        try:
+                            if isinstance(widget, QtWidgets.QDialog):
+                                title_match = (hasattr(widget, 'windowTitle') and 
+                                             widget.windowTitle() == "Hax Game Exporter - Help")
+                                class_match = widget.__class__.__name__ == 'HaxExporterHelpDialog'
+                                
+                                if title_match or class_match:
+                                    dialogs_to_close.append(widget)
+                        except:
+                            pass
+                    
+                    # Close them without showing
+                    for dialog in dialogs_to_close:
+                        try:
+                            # Use explicit cleanup method
+                            if hasattr(dialog, 'tooltip_buttons'):
+                                for button in dialog.tooltip_buttons:
+                                    try:
+                                        if hasattr(button, 'cleanup'):
+                                            button.cleanup()
+                                    except:
+                                        pass
+                            
+                            dialog.close()
+                            dialog.deleteLater()
+                        except:
+                            pass
+                    
+                    # Process events to complete deletions
+                    for _ in range(3):
+                        QtWidgets.QApplication.processEvents()
+        except:
+            pass
+        
         # Get the source file path using multiple methods to ensure it works in all scenarios
         source_file = None
         installer_dir = None
@@ -139,6 +202,33 @@ def install_hax_game_exporter():
             show_error_dialog(error_msg)
             return False
         
+        # Copy HaxExporterHelper.py if it exists
+        helper_copied = False
+        if installer_dir:
+            helper_source = os.path.join(installer_dir, "HaxExporterHelper.py")
+            if os.path.exists(helper_source):
+                try:
+                    helper_dest = os.path.join(maya_script_dir, "HaxExporterHelper.py")
+                    
+                    # Try to remove existing file first to avoid file lock issues
+                    if os.path.exists(helper_dest):
+                        try:
+                            os.remove(helper_dest)
+                        except Exception:
+                            # If we can't remove it, try renaming it as backup
+                            try:
+                                backup_dest = helper_dest + ".backup"
+                                if os.path.exists(backup_dest):
+                                    os.remove(backup_dest)
+                                os.rename(helper_dest, backup_dest)
+                            except Exception:
+                                pass
+                    
+                    shutil.copy2(helper_source, helper_dest)
+                    helper_copied = True
+                except Exception as e:
+                    cmds.warning("Could not copy HaxExporterHelper.py: " + str(e))
+        
         # Copy the icon file if it exists
         icon_path = None
         if installer_dir:
@@ -165,19 +255,74 @@ def install_hax_game_exporter():
         # Create the shelf button on the current shelf
         button_created = create_shelf_button(icon_path)
         
-        # Create presets folder if it doesn't exist
-        presets_dir = os.path.join(maya_script_dir, "custom_game_exporter_presets")
-        if not os.path.exists(presets_dir):
-            try:
-                os.makedirs(presets_dir)
-                print("Created presets directory:", presets_dir)
-            except Exception as e:
-                print("Note: Could not create presets directory:", str(e))
+        # Copy hax_exporter_data folder if it exists
+        data_copied = False
+        if installer_dir:
+            data_source = os.path.join(installer_dir, "hax_exporter_data")
+            if os.path.exists(data_source):
+                try:
+                    data_dest = os.path.join(maya_script_dir, "hax_exporter_data")
+                    
+                    # Try multiple times with delays if files are locked
+                    import time
+                    max_attempts = 3
+                    for attempt in range(max_attempts):
+                        try:
+                            # Remove existing directory to ensure clean copy
+                            if os.path.exists(data_dest):
+                                shutil.rmtree(data_dest)
+                            # Copy entire directory tree
+                            shutil.copytree(data_source, data_dest)
+                            data_copied = True
+                            break
+                        except Exception as retry_error:
+                            if attempt < max_attempts - 1:
+                                # Wait a bit and try again
+                                time.sleep(0.5)
+                            else:
+                                # Last attempt failed
+                                raise retry_error
+                    
+                except Exception as e:
+                    cmds.warning("Could not copy hax_exporter_data folder: " + str(e))
+                    # Create at least the presets folder if copy failed
+                    presets_dir = os.path.join(maya_script_dir, "hax_exporter_data", "Presets")
+                    if not os.path.exists(presets_dir):
+                        try:
+                            os.makedirs(presets_dir)
+                        except Exception:
+                            pass
+            else:
+                # If hax_exporter_data doesn't exist in source, create minimal structure
+                cmds.warning("hax_exporter_data folder not found at: " + data_source)
+                presets_dir = os.path.join(maya_script_dir, "hax_exporter_data", "Presets")
+                if not os.path.exists(presets_dir):
+                    try:
+                        os.makedirs(presets_dir)
+                    except Exception:
+                        pass
         
-        # Installation complete message
+        # Installation complete message with detailed status
+        status_lines = [
+            "Script location: {}".format(destination_file),
+            "",
+            "Shelf button created on current shelf.",
+            "",
+            "INSTALLATION STATUS:",
+            "- HaxExporterHelper.py: {}".format("COPIED" if helper_copied else "NOT FOUND"),
+            "- hax_exporter_data folder: {}".format("COPIED" if data_copied else "NOT FOUND")
+        ]
+        
+        # Add warning if something wasn't copied
+        if not helper_copied or not data_copied:
+            status_lines.append("")
+            status_lines.append("WARNING: Some files were not copied!")
+            status_lines.append("Check the Script Editor for details.")
+        
+        success_details = "\n".join(status_lines)
+        
         if button_created:
-            show_success_dialog("Hax Game Exporter successfully installed!", 
-                               "Script location: {}\n\nShelf button created on current shelf.".format(destination_file))
+            show_success_dialog("Hax Game Exporter successfully installed!", success_details)
         else:
             show_partial_success_dialog("Script installed but shelf button creation failed.", 
                                       "You can run the exporter with this Python command:\nimport HaxGameExporter; HaxGameExporter.initialize_exporter()")

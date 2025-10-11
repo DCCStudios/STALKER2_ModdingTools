@@ -3045,11 +3045,32 @@ import atexit
 atexit.register(cleanup_logging)
 
 def run_hax_exporter_helper():
-    helper_script = os.path.join(os.path.dirname(__file__), 'HaxExporterHelper.py')
-    if not os.path.exists(helper_script):
-        cmds.warning('HaxExporterHelper.py not found in the script directory.')
-        log_message('HaxExporterHelper.py not found in the script directory.')
+    """Run the help dialog using the helper script."""
+    # Try to find the helper script in multiple locations
+    helper_script = None
+    
+    # Method 1: Look in the same directory as this file
+    try:
+        if '__file__' in globals():
+            helper_script = os.path.join(os.path.dirname(__file__), 'HaxExporterHelper.py')
+            if not os.path.exists(helper_script):
+                helper_script = None
+    except:
+        pass
+    
+    # Method 2: Look in Maya's scripts directory
+    if not helper_script:
+        maya_script_dir = cmds.internalVar(userScriptDir=True)
+        potential_path = os.path.join(maya_script_dir, 'HaxExporterHelper.py')
+        if os.path.exists(potential_path):
+            helper_script = potential_path
+    
+    if not helper_script or not os.path.exists(helper_script):
+        error_msg = 'HaxExporterHelper.py not found. Please reinstall the Hax Game Exporter.'
+        cmds.warning(error_msg)
+        log_message(error_msg)
         return
+    
     try:
         if sys.version_info[0] == 2:
             execfile(helper_script, globals())
