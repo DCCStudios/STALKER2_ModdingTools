@@ -179,18 +179,22 @@ def install_hax_game_exporter():
         print("Destination:", destination_file)
         
         # Check if the destination file exists
+        preserve_data = False
         if os.path.exists(destination_file):
             result = cmds.confirmDialog(
                 title='Overwrite Existing File?',
-                message='HaxGameExporter.py already exists in the scripts directory. Overwrite?',
-                button=['Yes', 'No'],
-                defaultButton='Yes',
-                cancelButton='No',
-                dismissString='No'
+                message='HaxGameExporter.py already exists in the scripts directory.\n\nChoose how to proceed:',
+                button=['Overwrite (Keep Existing Data)', 'Overwrite (Remove Old Data)', 'Cancel'],
+                defaultButton='Overwrite (Keep Existing Data)',
+                cancelButton='Cancel',
+                dismissString='Cancel'
             )
-            if result != 'Yes':
-                show_error_dialog("Installation aborted: User chose not to overwrite existing file.")
+            if result == 'Cancel':
+                show_error_dialog("Installation aborted: User cancelled installation.")
                 return False
+            elif result == 'Overwrite (Keep Existing Data)':
+                preserve_data = True
+                print("User chose to preserve existing data folder")
         
         # Copy the file without modifying it
         try:
@@ -257,31 +261,38 @@ def install_hax_game_exporter():
         
         # Copy hax_exporter_data folder if it exists
         data_copied = False
+        data_preserved = False
         if installer_dir:
             data_source = os.path.join(installer_dir, "hax_exporter_data")
             if os.path.exists(data_source):
                 try:
                     data_dest = os.path.join(maya_script_dir, "hax_exporter_data")
                     
-                    # Try multiple times with delays if files are locked
-                    import time
-                    max_attempts = 3
-                    for attempt in range(max_attempts):
-                        try:
-                            # Remove existing directory to ensure clean copy
-                            if os.path.exists(data_dest):
-                                shutil.rmtree(data_dest)
-                            # Copy entire directory tree
-                            shutil.copytree(data_source, data_dest)
-                            data_copied = True
-                            break
-                        except Exception as retry_error:
-                            if attempt < max_attempts - 1:
-                                # Wait a bit and try again
-                                time.sleep(0.5)
-                            else:
-                                # Last attempt failed
-                                raise retry_error
+                    # Check if we should preserve existing data
+                    if preserve_data and os.path.exists(data_dest):
+                        print("Preserving existing hax_exporter_data folder as requested")
+                        data_preserved = True
+                        data_copied = True  # Mark as "copied" since data exists
+                    else:
+                        # Try multiple times with delays if files are locked
+                        import time
+                        max_attempts = 3
+                        for attempt in range(max_attempts):
+                            try:
+                                # Remove existing directory to ensure clean copy
+                                if os.path.exists(data_dest):
+                                    shutil.rmtree(data_dest)
+                                # Copy entire directory tree
+                                shutil.copytree(data_source, data_dest)
+                                data_copied = True
+                                break
+                            except Exception as retry_error:
+                                if attempt < max_attempts - 1:
+                                    # Wait a bit and try again
+                                    time.sleep(0.5)
+                                else:
+                                    # Last attempt failed
+                                    raise retry_error
                     
                 except Exception as e:
                     cmds.warning("Could not copy hax_exporter_data folder: " + str(e))
@@ -303,6 +314,14 @@ def install_hax_game_exporter():
                         pass
         
         # Installation complete message with detailed status
+        # Determine data folder status message
+        if data_preserved:
+            data_status = "PRESERVED (kept existing)"
+        elif data_copied:
+            data_status = "COPIED"
+        else:
+            data_status = "NOT FOUND"
+        
         status_lines = [
             "Script location: {}".format(destination_file),
             "",
@@ -310,11 +329,11 @@ def install_hax_game_exporter():
             "",
             "INSTALLATION STATUS:",
             "- HaxExporterHelper.py: {}".format("COPIED" if helper_copied else "NOT FOUND"),
-            "- hax_exporter_data folder: {}".format("COPIED" if data_copied else "NOT FOUND")
+            "- hax_exporter_data folder: {}".format(data_status)
         ]
         
-        # Add warning if something wasn't copied
-        if not helper_copied or not data_copied:
+        # Add warning if something wasn't copied (but don't warn if data was preserved by choice)
+        if not helper_copied or (not data_copied and not data_preserved):
             status_lines.append("")
             status_lines.append("WARNING: Some files were not copied!")
             status_lines.append("Check the Script Editor for details.")

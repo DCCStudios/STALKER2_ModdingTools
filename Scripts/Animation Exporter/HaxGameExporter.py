@@ -103,6 +103,33 @@ def force_ui_refresh():
     except Exception as e:
         log_message("Error during UI refresh: %s" % str(e))
 
+# Helper function to get joints and locators from selection or list
+def get_joints_and_locators(objects=None):
+    """
+    Get joints and locators from a list of objects or from current selection.
+    Locators are identified as transform nodes with locator shape children.
+    
+    Args:
+        objects (list): Optional list of objects to filter. If None, uses current selection.
+        
+    Returns:
+        list: List of joint and locator transform nodes
+    """
+    if objects is None:
+        objects = cmds.ls(selection=True)
+    
+    result = []
+    for obj in objects:
+        node_type = cmds.nodeType(obj)
+        if node_type == "joint":
+            result.append(obj)
+        elif node_type == "transform":
+            # Check if this transform has a locator shape
+            shapes = cmds.listRelatives(obj, shapes=True, type="locator") or []
+            if shapes:
+                result.append(obj)
+    return result
+
 # Deferred execution functions
 def _force_refresh_fn():
     log_message("Forcing UI refresh via deferred execution...")
@@ -111,9 +138,9 @@ def _force_refresh_fn():
 def _try_alternative_export_fn():
     log_message("Trying alternative export method...")
     try:
-        sel = cmds.ls(selection=True, type="joint")
+        sel = get_joints_and_locators()
         if not sel:
-            log_message("No root joint found for alternative export")
+            log_message("No root joint/locator found for alternative export")
             return
         root = sel[0]
         out_path = cmds.optionVar(q="out_path_temp") if cmds.optionVar(exists="out_path_temp") else ""
@@ -151,8 +178,10 @@ default_export_settings = {
     "exportMode": "Export All Clips",
     "currentPreset": "<None>",
     "removeNamespaces": False,
+    "bakeFromConstraints": False,
     "includeChildren": True,
     "inputConnections": False,
+    "constraints": False,
     "rotationOffset": {
         "enabled": False,
         "joint": "",
@@ -597,6 +626,18 @@ def save_preset(name):
         if cmds.textField("prefixField", exists=True):
             export_settings["clipPrefix"] = cmds.textField("prefixField", q=True, text=True)
         
+        # Capture checkbox values from UI
+        if cmds.checkBox("removeNamespacesCheck", exists=True):
+            export_settings["removeNamespaces"] = cmds.checkBox("removeNamespacesCheck", q=True, value=True)
+        if cmds.checkBox("bakeFromConstraintsCheck", exists=True):
+            export_settings["bakeFromConstraints"] = cmds.checkBox("bakeFromConstraintsCheck", q=True, value=True)
+        if cmds.checkBox("includeChildrenCheck", exists=True):
+            export_settings["includeChildren"] = cmds.checkBox("includeChildrenCheck", q=True, value=True)
+        if cmds.checkBox("inputConnectionsCheck", exists=True):
+            export_settings["inputConnections"] = cmds.checkBox("inputConnectionsCheck", q=True, value=True)
+        if cmds.checkBox("constraintsCheck", exists=True):
+            export_settings["constraints"] = cmds.checkBox("constraintsCheck", q=True, value=True)
+        
         # Capture rotation offset UI values
         if cmds.checkBox("rotationOffsetEnabled", exists=True):
             if "rotationOffset" not in export_settings:
@@ -630,19 +671,49 @@ def save_preset(name):
                     anim_layer_checkboxes[layer] = cmds.checkBox(checkbox_name, q=True, value=True)
         log_message("Captured animation layer states before saving preset: %s" % anim_layer_checkboxes)
         
-        joints = [j for j in cmds.ls(selection=True) if cmds.nodeType(j) == "joint"]
+        joints = get_joints_and_locators()
+        
+        # If no joints selected, check if we're updating an existing preset
         if not joints:
-            cmds.warning("No joints selected for preset.")
-            log_message("No joints selected for preset '%s'" % name)
-            cmds.confirmDialog(
-                title="No Joints Selected",
-                message="You must select at least one joint in the scene to save a preset.",
-                button=["OK"],
-                defaultButton="OK",
-                cancelButton="OK",
-                dismissString="OK"
-            )
-            return
+            if os.path.isfile(path):
+                # Preset exists - load existing joint list and update only settings
+                log_message("No joints selected, updating settings for existing preset '%s'" % name)
+                try:
+                    with open(path, "r") as f:
+                        existing_data = json.load(f)
+                    # Keep existing joints, update only settings and animation layers
+                    joints = existing_data.get("root_joints", [])
+                    log_message("Preserving %d existing joints from preset" % len(joints))
+                except Exception as e:
+                    log_message("Error reading existing preset: %s" % str(e))
+                    joints = []
+                
+                # If still no joints (corrupted preset or empty), show error
+                if not joints:
+                    cmds.warning("Cannot update preset without joints.")
+                    cmds.confirmDialog(
+                        title="No Joints in Preset",
+                        message="This preset has no joints. Please select at least one joint or locator to save.",
+                        button=["OK"],
+                        defaultButton="OK"
+                    )
+                    return
+            else:
+                # New preset - must have joints selected
+                cmds.warning("No joints/locators selected for new preset.")
+                log_message("No joints/locators selected for new preset '%s'" % name)
+                cmds.confirmDialog(
+                    title="No Joints/Locators Selected",
+                    message="You must select at least one joint or locator to create a new preset.",
+                    button=["OK"],
+                    defaultButton="OK",
+                    cancelButton="OK",
+                    dismissString="OK"
+                )
+                return
+        else:
+            log_message("Saving preset '%s' with %d selected joints/locators" % (name, len(joints)))
+        
         data = {
             "export_settings": export_settings.copy(),
             "root_joints": joints,
@@ -712,7 +783,9 @@ def load_preset(name, skip_path_update=False):
                     "rotationOffset": export_settings.get("rotationOffset", {}).copy(),
                     "includeChildren": export_settings.get("includeChildren", True),
                     "inputConnections": export_settings.get("inputConnections", False),
+                    "constraints": export_settings.get("constraints", False),
                     "removeNamespaces": export_settings.get("removeNamespaces", False),
+                    "bakeFromConstraints": export_settings.get("bakeFromConstraints", False),
                     "moveToOrigin": export_settings.get("moveToOrigin", False),
                     "embedMedia": export_settings.get("embedMedia", True),
                     "bakeAnimation": export_settings.get("bakeAnimation", True),
@@ -728,7 +801,7 @@ def load_preset(name, skip_path_update=False):
                 # Only update specific settings from the preset, preserve the rest
                 for key in preset_settings:
                     if key not in ["exportPath", "clipPrefix", "exportMode", "rotationOffset", 
-                                  "includeChildren", "inputConnections", "removeNamespaces",
+                                  "includeChildren", "inputConnections", "constraints", "removeNamespaces", "bakeFromConstraints",
                                   "moveToOrigin", "embedMedia", "bakeAnimation", "altRootControl"]:
                         export_settings[key] = preset_settings[key]
                 
@@ -775,6 +848,10 @@ def load_preset(name, skip_path_update=False):
                 if cmds.checkBox("removeNamespacesCheck", exists=True):
                     cmds.checkBox("removeNamespacesCheck", edit=True, value=export_settings.get("removeNamespaces", False))
                 
+                # Update bake from constraints checkbox
+                if cmds.checkBox("bakeFromConstraintsCheck", exists=True):
+                    cmds.checkBox("bakeFromConstraintsCheck", edit=True, value=export_settings.get("bakeFromConstraints", False))
+                
                 # Update include children checkbox
                 if cmds.checkBox("includeChildrenCheck", exists=True):
                     cmds.checkBox("includeChildrenCheck", edit=True, value=export_settings.get("includeChildren", True))
@@ -782,6 +859,10 @@ def load_preset(name, skip_path_update=False):
                 # Update input connections checkbox
                 if cmds.checkBox("inputConnectionsCheck", exists=True):
                     cmds.checkBox("inputConnectionsCheck", edit=True, value=export_settings.get("inputConnections", False))
+                
+                # Update constraints checkbox
+                if cmds.checkBox("constraintsCheck", exists=True):
+                    cmds.checkBox("constraintsCheck", edit=True, value=export_settings.get("constraints", False))
                     
                 # Update export mode dropdown if it exists
                 if "exportMode" in export_settings and cmds.optionMenu("exportModeMenu", exists=True):
@@ -1308,10 +1389,10 @@ def duplicate_skeleton_without_namespaces(root_joint):
         
         # Select the root joint and all its descendants
         cmds.select(root_joint, hierarchy=True)
-        original_joints = cmds.ls(selection=True, type="joint", long=True)
+        original_joints = get_joints_and_locators(cmds.ls(selection=True, long=True))
         
         if not original_joints:
-            log_message("No joints found in hierarchy")
+            log_message("No joints/locators found in hierarchy")
             return None, [], []
             
         log_message("Found %d joints in original hierarchy" % len(original_joints))
@@ -1322,9 +1403,9 @@ def duplicate_skeleton_without_namespaces(root_joint):
         
         # Get all joints in the duplicated hierarchy
         cmds.select(duplicate_root, hierarchy=True)
-        duplicate_joints = cmds.ls(selection=True, type="joint", long=True)
+        duplicate_joints = get_joints_and_locators(cmds.ls(selection=True, long=True))
         
-        log_message("Duplicated %d joints" % len(duplicate_joints))
+        log_message("Duplicated %d joints/locators" % len(duplicate_joints))
         
         # Remove namespaces from all duplicated joints
         renamed_joints = []
@@ -1820,7 +1901,7 @@ def set_fbx_export_settings(adjusted_start, adjusted_end, fbx_version, is_ascii=
         mel.eval("FBXExportSkins -v true;")
         mel.eval("FBXExportShapes -v true;")
         mel.eval("FBXExportApplyConstantKeyReducer -v false;")
-        mel.eval("FBXExportConstraints -v false;")
+        mel.eval("FBXExportConstraints -v %s;" % ("true" if export_settings.get("constraints", False) else "false"))
         mel.eval("FBXExportSkeletonDefinitions -v true;")
         mel.eval("FBXExportCameras -v true;")
         mel.eval("FBXExportLights -v true;")
@@ -1884,6 +1965,54 @@ def anim_layer_states_match():
                 continue
     return True
 
+def bake_joints_animation(root_joint, start_frame, end_frame):
+    """
+    Bake animation on all joints in the hierarchy by keying them on every frame.
+    This is useful for baking constraint-driven animations into keyframes.
+    
+    Args:
+        root_joint (str): The root joint of the hierarchy to bake
+        start_frame (int): Start frame for baking
+        end_frame (int): End frame for baking
+    """
+    try:
+        log_message("Baking animation for joint hierarchy starting from: %s" % root_joint)
+        log_message("Frame range: %d to %d" % (start_frame, end_frame))
+        
+        # Select the root and all its descendants
+        cmds.select(root_joint, hierarchy=True)
+        joints_to_bake = get_joints_and_locators(cmds.ls(selection=True, long=True))
+        
+        if not joints_to_bake:
+            log_message("No joints found to bake")
+            return
+        
+        log_message("Found %d joints/locators to bake" % len(joints_to_bake))
+        
+        # Bake animation on all joints
+        cmds.bakeResults(
+            joints_to_bake,
+            time=(start_frame, end_frame),
+            simulation=True,
+            sampleBy=1,
+            disableImplicitControl=True,
+            preserveOutsideKeys=True,
+            sparseAnimCurveBake=False,
+            removeBakedAttributeFromLayer=False,
+            removeBakedAnimFromLayer=False,
+            bakeOnOverrideLayer=False,
+            minimizeRotation=True,
+            controlPoints=False,
+            shape=True
+        )
+        
+        log_message("Successfully baked animation on %d joints" % len(joints_to_bake))
+        
+    except Exception as e:
+        error_msg = "Error baking joints animation: %s" % str(e)
+        log_message(error_msg)
+        cmds.warning(error_msg)
+
 def export_clips(targets=None):
     global clip_data, overwrite_all, skip_all
     # Extra robust: Force text fields to lose focus to ensure values are committed
@@ -1929,7 +2058,7 @@ def export_clips(targets=None):
         except Exception:
             pass
     # --- Restore root joint selection logic ---
-    sel = cmds.ls(selection=True, type="joint")
+    sel = get_joints_and_locators()
     root = None
     namespace = None
     try:
@@ -1938,19 +2067,21 @@ def export_clips(targets=None):
     except Exception as e:
         log_message("Error checking selected namespace: %s" % str(e))
     if sel:
-        # If joints are explicitly selected, use them regardless of namespace
-        valid_joints = [j for j in sel if cmds.objExists(j) and cmds.nodeType(j) == "joint"]
+        # If joints/locators are explicitly selected, use them regardless of namespace
+        valid_joints = [j for j in sel if cmds.objExists(j)]
         if valid_joints:
             root = valid_joints[0]
-            log_message("Using selected root joint: %s" % root)
-            log_message("User has joints selected - ignoring namespace filtering and preset joints")
+            log_message("Using selected root joint/locator: %s" % root)
+            log_message("User has joints/locators selected - ignoring namespace filtering and preset joints")
     else:
         current_preset = cmds.optionMenu("presetDropdown", q=True, value=True) if cmds.optionMenu("presetDropdown", exists=True) else "<None>"
         if current_preset != "<None>":
             # Use skip_path_update=True to preserve all current settings during export
             preset_joints = load_preset(current_preset, skip_path_update=True)
             log_message("Loaded preset joints while preserving current export settings")
-            valid_joints = [j for j in preset_joints if cmds.objExists(j) and cmds.nodeType(j) == "joint"]
+            # Filter for existing joints and locators
+            existing_joints = [j for j in preset_joints if cmds.objExists(j)]
+            valid_joints = get_joints_and_locators(existing_joints)
             if namespace:
                 try:
                     if 'filter_joints_by_namespace' in globals():
@@ -1960,9 +2091,9 @@ def export_clips(targets=None):
             if valid_joints:
                 root = valid_joints[0]
                 cmds.select(root, replace=True)
-                log_message("Selected preset root joint: %s" % root)
+                log_message("Selected preset root joint/locator: %s" % root)
     if not root:
-        error_message = "Select a root joint before exporting."
+        error_message = "Select a root joint or locator before exporting."
         cmds.warning(error_message)
         cmds.confirmDialog(
             title="Export Error",
@@ -1972,9 +2103,9 @@ def export_clips(targets=None):
             cancelButton="OK",
             dismissString="OK"
         )
-        log_message("ERROR: No root joint selected. Select a root joint before exporting.")
+        log_message("ERROR: No root joint/locator selected. Select a root joint or locator before exporting.")
         return
-    log_message("Using root joint: %s" % root)
+    log_message("Using root joint/locator: %s" % root)
     successful_exports = 0
     try:
         clips_to_export = []
@@ -2050,6 +2181,11 @@ def export_clips(targets=None):
                     # Always use animation layer for Move to Origin
                     pos_rot_anim = move_to_origin(root_for_origin, use_anim_layer=True)
                     log_message("Moved %s to origin using additive animation layer" % root_for_origin)
+                # Bake from constraints if enabled (before namespace removal)
+                if export_settings.get("bakeFromConstraints", False):
+                    log_message("Bake from Constraints enabled - baking animation on joints")
+                    bake_joints_animation(root, adjusted_start, adjusted_end)
+                
                 # Handle namespace removal if enabled
                 duplicate_root = None
                 duplicate_joints = []
@@ -2085,6 +2221,8 @@ def export_clips(targets=None):
                 export_details.append("Embed Media: ON")
                 export_details.append("Include Children: %s" % ("ON" if export_settings.get("includeChildren", True) else "OFF"))
                 export_details.append("Input Connections: %s" % ("ON" if export_settings.get("inputConnections", False) else "OFF"))
+                export_details.append("Constraints: %s" % ("ON" if export_settings.get("constraints", False) else "OFF"))
+                export_details.append("Bake from Constraints: %s" % ("ON" if export_settings.get("bakeFromConstraints", False) else "OFF"))
                 log_message("Export configuration:\n- " + "\n- ".join(export_details))
                 log_message("Starting export to: %s" % out_path)
                 cmds.optionVar(stringValue=["out_path_temp", out_path])
@@ -2663,9 +2801,9 @@ def update_preset_joints(add=True):
         with open(path, "r") as f:
             data = json.load(f)
         root_joints = set(data.get("root_joints", []))
-        selected = set(j for j in cmds.ls(selection=True) if cmds.nodeType(j) == "joint")
+        selected = set(get_joints_and_locators())
         if not selected and add:
-            cmds.warning("No joints selected.")
+            cmds.warning("No joints/locators selected.")
             return
         if add:
             root_joints.update(selected)
@@ -2679,6 +2817,86 @@ def update_preset_joints(add=True):
         error_msg = "Error updating preset joints:\n%s" % traceback.format_exc()
         cmds.warning(error_msg)
         log_message(error_msg)
+
+def get_hierarchical_joint_order(joints):
+    """
+    Sort joints in hierarchical order, showing parent-child relationships.
+    Returns a list of tuples: [(joint_name, indent_level, prefix), ...]
+    
+    Args:
+        joints (list): List of joint/locator names
+        
+    Returns:
+        list: List of tuples (joint_name, indent_level, tree_prefix) in hierarchical order
+    """
+    if not joints:
+        return []
+    
+    # Filter to only existing joints
+    existing_joints = [j for j in joints if cmds.objExists(j)]
+    if not existing_joints:
+        # Return non-existing joints as-is with 0 indent and no prefix
+        return [(j, 0, "") for j in joints]
+    
+    # Find roots: joints whose parent is not in the list or have no parent
+    roots = []
+    for joint in existing_joints:
+        parent = cmds.listRelatives(joint, parent=True)
+        if not parent or parent[0] not in existing_joints:
+            roots.append(joint)
+    
+    # Recursively build hierarchy with tree-style prefixes
+    result = []
+    visited = set()
+    
+    def add_hierarchy(joint_name, depth=0, is_last_child=True, parent_prefix=""):
+        if joint_name in visited:
+            return
+        visited.add(joint_name)
+        
+        # Build the tree prefix for this joint - using simple characters and larger spacing
+        if depth == 0:
+            # Root joint - no prefix
+            tree_prefix = ""
+        else:
+            # Child joint - add tree characters with extra spacing
+            if is_last_child:
+                tree_prefix = parent_prefix + u"\u2514\u2500\u2500\u2500 "  # └───  (3 dashes + space)
+            else:
+                tree_prefix = parent_prefix + u"\u251C\u2500\u2500\u2500 "  # ├───  (3 dashes + space)
+        
+        result.append((joint_name, depth, tree_prefix))
+        
+        # Get children that are in our joint list
+        children = cmds.listRelatives(joint_name, children=True, type="transform") or []
+        child_joints = [c for c in children if c in existing_joints and c not in visited]
+        
+        # Sort children alphabetically for consistency
+        child_joints = sorted(child_joints)
+        
+        # Process children
+        for i, child in enumerate(child_joints):
+            is_last = (i == len(child_joints) - 1)
+            
+            # Build prefix for child's children - always use spaces (no vertical continuation)
+            child_parent_prefix = parent_prefix + "      "  # 6 spaces for indentation
+            
+            add_hierarchy(child, depth + 1, is_last, child_parent_prefix)
+    
+    # Process each root hierarchy
+    sorted_roots = sorted(roots)
+    for idx, root in enumerate(sorted_roots):
+        add_hierarchy(root, 0)
+        # Add a blank separator between different root hierarchies (except after last)
+        if idx < len(sorted_roots) - 1:
+            result.append(("", -1, ""))  # Separator marker
+    
+    # Add any non-existing joints at the end with 0 indent
+    non_existing = [j for j in joints if j not in existing_joints]
+    for joint in non_existing:
+        result.append((joint, 0, ""))
+    
+    return result
 
 def show_preset_joints():
     preset_dir = get_presets_folder()
@@ -2694,16 +2912,250 @@ def show_preset_joints():
         with open(path, "r") as f:
             data = json.load(f)
         joints = data.get("root_joints", [])
+        
         if cmds.window("presetJointListWin", exists=True):
             cmds.deleteUI("presetJointListWin")
-        win = cmds.window("presetJointListWin", title="Preset Joints: " + name, widthHeight=(300, 200))
-        cmds.scrollLayout()
-        cmds.columnLayout(adjustableColumn=True)
-        for joint in joints:
-            cmds.text(label=joint)
-        cmds.setParent("..")
-        cmds.setParent("..")
+        
+        # Get or initialize ordering mode preference
+        if not cmds.optionVar(exists="haxExporter_jointOrderMode"):
+            cmds.optionVar(stringValue=("haxExporter_jointOrderMode", "added"))
+        
+        win = cmds.window("presetJointListWin", title="Preset Joints: " + name, 
+                         widthHeight=(400, 350))
+        main_layout = cmds.columnLayout("presetJointMainLayout", adjustableColumn=True, rowSpacing=5)
+        
+        # Info section
+        cmds.separator(height=5, style="none")
+        cmds.text("presetJointTotalText", label="Total Joints in Preset: %d" % len(joints), 
+                 align="left", font="boldLabelFont")
+        cmds.text("presetJointSelectedText", label="Currently Selected: 0", 
+                 align="left", font="boldLabelFont")
+        cmds.separator(height=5, style="in")
+        
+        # Select All button
+        def select_all_preset_joints(*args):
+            try:
+                # Filter joints to only select ones that exist in the scene
+                existing_joints = [j for j in joints if cmds.objExists(j)]
+                if existing_joints:
+                    cmds.select(existing_joints, replace=True)
+                    log_message("Selected %d joints from preset '%s'" % (len(existing_joints), name))
+                else:
+                    cmds.warning("None of the preset joints exist in the current scene.")
+                    log_message("No preset joints found in scene for preset '%s'" % name)
+            except Exception as e:
+                error_msg = "Error selecting preset joints: %s" % str(e)
+                cmds.warning(error_msg)
+                log_message(error_msg)
+        
+        cmds.button(label="Select All Joints", height=30, 
+                   command=select_all_preset_joints,
+                   annotation="Select all joints from this preset that exist in the scene",
+                   bgc=(0.65, 0.87, 0.65))
+        
+        # Function to rebuild joint list with current ordering
+        def rebuild_joint_list(*args):
+            try:
+                # Delete existing joint list layout if it exists
+                if cmds.scrollLayout("presetJointScrollLayout", exists=True):
+                    cmds.deleteUI("presetJointScrollLayout")
+                
+                # Set parent back to main layout
+                cmds.setParent(main_layout)
+                
+                # Get current ordering mode
+                order_mode = cmds.optionVar(q="haxExporter_jointOrderMode")
+                
+                # Prepare joint list based on ordering mode
+                if order_mode == "hierarchical":
+                    joint_list = get_hierarchical_joint_order(joints)
+                else:  # "added" order
+                    joint_list = [(j, 0, "") for j in joints]
+                
+                # Create scrollable joint list
+                cmds.scrollLayout("presetJointScrollLayout", childResizable=True, height=450, parent=main_layout)
+                cmds.columnLayout("presetJointListColumn", adjustableColumn=True)
+                
+                # Get current selection to highlight selected joints
+                current_selection = cmds.ls(selection=True) or []
+                
+                # Variable to track last clicked joint for Shift+Click range selection
+                last_clicked_joint = [None]  # Use list to allow mutation in nested function
+                
+                # Store flattened joint names for index lookups
+                flat_joints = [j[0] for j in joint_list if j[0]]  # Skip empty separators
+                
+                for idx, joint_data in enumerate(joint_list):
+                    # Handle separator entries
+                    if len(joint_data) == 3 and joint_data[1] == -1:
+                        # This is a separator between root hierarchies
+                        cmds.separator(height=3, style="none")
+                        continue
+                    
+                    joint, indent_level, tree_prefix = joint_data
+                    # Create clickable button for each joint
+                    def make_select_joint_command(joint_name, joint_index):
+                        def cmd(*args):
+                            try:
+                                if cmds.objExists(joint_name):
+                                    # Get keyboard modifiers
+                                    modifiers = cmds.getModifiers()
+                                    shift_held = (modifiers & 1) > 0
+                                    ctrl_held = (modifiers & 4) > 0
+                                    
+                                    if shift_held and last_clicked_joint[0] is not None:
+                                        # Shift+Click: Range selection
+                                        try:
+                                            last_idx = flat_joints.index(last_clicked_joint[0]) if last_clicked_joint[0] in flat_joints else None
+                                            current_idx = joint_index
+                                            
+                                            if last_idx is not None:
+                                                start_idx = min(last_idx, current_idx)
+                                                end_idx = max(last_idx, current_idx)
+                                                range_joints = [flat_joints[i] for i in range(start_idx, end_idx + 1) if cmds.objExists(flat_joints[i])]
+                                                
+                                                if range_joints:
+                                                    if ctrl_held:
+                                                        cmds.select(range_joints, add=True)
+                                                        log_message("Added range of %d joints to selection" % len(range_joints))
+                                                    else:
+                                                        cmds.select(range_joints, replace=True)
+                                                        log_message("Selected range of %d joints" % len(range_joints))
+                                        except Exception as e:
+                                            log_message("Error in range selection: %s" % str(e))
+                                            cmds.select(joint_name, replace=True)
+                                    elif ctrl_held:
+                                        # Ctrl+Click: Toggle selection
+                                        current_sel = cmds.ls(selection=True) or []
+                                        if joint_name in current_sel:
+                                            cmds.select(joint_name, deselect=True)
+                                            log_message("Deselected joint: %s" % joint_name)
+                                        else:
+                                            cmds.select(joint_name, add=True)
+                                            log_message("Added joint to selection: %s" % joint_name)
+                                        last_clicked_joint[0] = joint_name
+                                    else:
+                                        # Normal click: Replace selection
+                                        cmds.select(joint_name, replace=True)
+                                        log_message("Selected joint: %s" % joint_name)
+                                        last_clicked_joint[0] = joint_name
+                                else:
+                                    cmds.warning("Joint does not exist in scene: %s" % joint_name)
+                            except Exception as e:
+                                error_msg = "Error selecting joint %s: %s" % (joint_name, str(e))
+                                cmds.warning(error_msg)
+                                log_message(error_msg)
+                        return cmd
+                    
+                    # Create unique button name for this joint
+                    button_name = "presetJointBtn_%d" % idx
+                    
+                    # Color code joints based on existence in scene and selection state
+                    if cmds.objExists(joint):
+                        is_selected = joint in current_selection
+                        bg_color = (0.45, 0.45, 0.45) if is_selected else (0.25, 0.25, 0.25)
+                        # Add tree prefix and selection marker
+                        label = tree_prefix + (u"\u25BA " + joint if is_selected else joint)
+                        
+                        cmds.button(button_name, label=label, align="left", height=20,
+                                   command=make_select_joint_command(joint, idx),
+                                   annotation="Click to select | Shift+Click for range | Ctrl+Click to add/remove",
+                                   backgroundColor=bg_color)
+                    else:
+                        cmds.button(button_name, label=tree_prefix + joint + " (not in scene)", align="left", height=20,
+                                   enable=False,
+                                   annotation="This joint does not exist in the current scene",
+                                   backgroundColor=(0.2, 0.2, 0.2))
+                
+                cmds.setParent("..")
+                cmds.setParent("..")
+                
+                log_message("Rebuilt joint list with '%s' ordering" % order_mode)
+            except Exception as e:
+                error_msg = "Error rebuilding joint list: %s" % traceback.format_exc()
+                cmds.warning(error_msg)
+                log_message(error_msg)
+        
+        # Toggle button for ordering mode
+        def toggle_order_mode(*args):
+            current_mode = cmds.optionVar(q="haxExporter_jointOrderMode")
+            new_mode = "hierarchical" if current_mode == "added" else "added"
+            cmds.optionVar(stringValue=("haxExporter_jointOrderMode", new_mode))
+            
+            # Update button label
+            if cmds.button("toggleOrderBtn", exists=True):
+                label = "Order: Hierarchical" if new_mode == "hierarchical" else "Order: Added"
+                cmds.button("toggleOrderBtn", edit=True, label=label)
+            
+            # Rebuild the joint list
+            rebuild_joint_list()
+            
+            log_message("Switched joint ordering to: %s" % new_mode)
+        
+        # Create toggle button
+        current_mode = cmds.optionVar(q="haxExporter_jointOrderMode")
+        mode_label = "Order: Hierarchical" if current_mode == "hierarchical" else "Order: Added"
+        cmds.button("toggleOrderBtn", label=mode_label, height=25,
+                   command=toggle_order_mode,
+                   annotation="Toggle between added order and hierarchical order",
+                   bgc=(0.4, 0.6, 0.8))
+        
+        cmds.separator(height=5, style="in")
+        
+        # Build initial joint list
+        rebuild_joint_list()
+        
+        # Function to update selected count and button highlighting
+        def update_selected_count(*args):
+            try:
+                if not cmds.window("presetJointListWin", exists=True):
+                    return
+                selected = get_joints_and_locators()
+                # Count how many selected joints are in the preset
+                selected_in_preset = [j for j in selected if j in joints]
+                count = len(selected_in_preset)
+                if cmds.text("presetJointSelectedText", exists=True):
+                    cmds.text("presetJointSelectedText", edit=True, 
+                             label="Currently Selected: %d" % count)
+                
+                # Get current ordering mode and joint list
+                order_mode = cmds.optionVar(q="haxExporter_jointOrderMode")
+                if order_mode == "hierarchical":
+                    joint_list = get_hierarchical_joint_order(joints)
+                else:
+                    joint_list = [(j, 0, "") for j in joints]
+                
+                # Update button colors and labels to highlight selected joints
+                for idx, joint_data in enumerate(joint_list):
+                    # Skip separator entries
+                    if len(joint_data) == 3 and joint_data[1] == -1:
+                        continue
+                    
+                    joint, indent_level, tree_prefix = joint_data
+                    button_name = "presetJointBtn_%d" % idx
+                    if cmds.button(button_name, exists=True):
+                        # Only update color for existing joints (not disabled buttons)
+                        if cmds.objExists(joint):
+                            is_selected = joint in selected
+                            # Lighter gray for selected, normal dark gray for unselected
+                            bg_color = (0.45, 0.45, 0.45) if is_selected else (0.25, 0.25, 0.25)
+                            
+                            # Add tree prefix and visual marker
+                            label = tree_prefix + (u"\u25BA " + joint if is_selected else joint)
+                            
+                            cmds.button(button_name, edit=True, backgroundColor=bg_color, label=label)
+            except Exception:
+                pass
+        
+        # Create script job to update selection count
+        script_job_id = cmds.scriptJob(event=["SelectionChanged", update_selected_count], 
+                                      parent="presetJointListWin")
+        
+        # Initial update
+        update_selected_count()
+        
         cmds.showWindow(win)
+        log_message("Opened preset joints window for '%s' with %d joints" % (name, len(joints)))
     except Exception:
         error_msg = "Error showing preset joints:\n%s" % traceback.format_exc()
         cmds.warning(error_msg)
@@ -2915,6 +3367,12 @@ def create_ui():
                      annotation="Create a duplicate skeleton without namespaces for export. Only applies if the root joint has a namespace. The duplicate is constrained, baked, exported, then deleted.",
                      changeCommand=lambda v: [export_settings.update({"removeNamespaces": v}), save_scene_data()])
         
+        # Add Bake from Constraints checkbox
+        cmds.checkBox("bakeFromConstraintsCheck", label="Bake from Constraints",
+                     value=export_settings.get("bakeFromConstraints", False),
+                     annotation="SAVE BEFORE USING.\n\nKey all joints on every frame of the animation before export.\nUseful for baking constraint animations into keyframes.\n\nThis isn't normally needed, but if joints are being exported\nwithout any animation, this may fix it.\n\nTHIS WILL LIKELY BREAK YOUR RIG. RELOAD YOUR SCENE.",
+                     changeCommand=lambda v: [export_settings.update({"bakeFromConstraints": v}), save_scene_data()])
+        
         # Add Include Children checkbox
         cmds.checkBox("includeChildrenCheck", label="Include Children",
                      value=export_settings.get("includeChildren", True),
@@ -2926,6 +3384,12 @@ def create_ui():
                      value=export_settings.get("inputConnections", False),
                      annotation="Include input connections in the FBX export. When enabled, input connections to exported objects will be preserved.",
                      changeCommand=lambda v: [export_settings.update({"inputConnections": v}), save_scene_data()])
+        
+        # Add Constraints checkbox
+        cmds.checkBox("constraintsCheck", label="Constraints",
+                     value=export_settings.get("constraints", False),
+                     annotation="When enabled, transforms from constraints will be taken into account and exported.",
+                     changeCommand=lambda v: [export_settings.update({"constraints": v}), save_scene_data()])
         
         cmds.setParent("..")
         cmds.frameLayout("pathFrame", label="Path",
@@ -2999,6 +3463,53 @@ def create_ui():
                 log_message("Last saved preset '%s' not found or invalid, setting to <None>" % export_settings["currentPreset"])
                 cmds.optionMenu("presetDropdown", edit=True, value="<None>")
                 on_preset_selected("<None>", from_initialization=True)
+        
+        # Add cleanup script job to close child windows when main window closes
+        def cleanup_child_windows():
+            """Close Show Joints and Helper windows when main exporter closes"""
+            try:
+                # Close Show Joints window
+                if cmds.window("presetJointListWin", exists=True):
+                    cmds.deleteUI("presetJointListWin")
+                    log_message("Closed Show Joints window on main window close")
+            except Exception as e:
+                log_message("Error closing Show Joints window: %s" % str(e))
+            
+            try:
+                # Close Helper dialog (Qt dialog)
+                # Try to call the close function if it exists in globals
+                if 'close_all_help_dialogs' in globals():
+                    close_all_help_dialogs()
+                    log_message("Closed Help dialog on main window close")
+                else:
+                    # Fallback: Try to find and close the dialog using Qt
+                    try:
+                        # Try importing PySide to close the dialog directly
+                        try:
+                            from PySide6 import QtWidgets
+                        except ImportError:
+                            from PySide2 import QtWidgets
+                        
+                        app = QtWidgets.QApplication.instance()
+                        if app:
+                            all_widgets = app.allWidgets()
+                            for widget in all_widgets:
+                                try:
+                                    if isinstance(widget, QtWidgets.QDialog):
+                                        if hasattr(widget, 'windowTitle') and widget.windowTitle() == "Hax Game Exporter - Help":
+                                            widget.close()
+                                            widget.deleteLater()
+                                            log_message("Closed Help dialog using Qt fallback method")
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+            except Exception as e:
+                log_message("Error closing Help dialog: %s" % str(e))
+        
+        cmds.scriptJob(uiDeleted=[WINDOW_NAME, cleanup_child_windows], protected=False)
+        log_message("Registered cleanup script job for child windows")
+        
         cmds.showWindow(WINDOW_NAME)
     except Exception:
         error_msg = "Error creating UI:\n%s" % traceback.format_exc()
