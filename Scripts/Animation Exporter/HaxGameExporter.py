@@ -168,7 +168,7 @@ def _try_alternative_export_fn():
 
 # Default export settings
 default_export_settings = {
-    "fileType": "Binary",
+    "fileType": "ASCII",
     "fbxVersion": "2018",
     "embedMedia": True,
     "bakeAnimation": True,
@@ -626,6 +626,12 @@ def save_preset(name):
         if cmds.textField("prefixField", exists=True):
             export_settings["clipPrefix"] = cmds.textField("prefixField", q=True, text=True)
         
+        # Capture file type and FBX version from UI
+        if cmds.optionMenuGrp("fileTypeMenu", exists=True):
+            export_settings["fileType"] = cmds.optionMenuGrp("fileTypeMenu", q=True, value=True)
+        if cmds.optionMenuGrp("fbxVerMenu", exists=True):
+            export_settings["fbxVersion"] = cmds.optionMenuGrp("fbxVerMenu", q=True, value=True)
+        
         # Capture checkbox values from UI
         if cmds.checkBox("removeNamespacesCheck", exists=True):
             export_settings["removeNamespaces"] = cmds.checkBox("removeNamespacesCheck", q=True, value=True)
@@ -863,6 +869,22 @@ def load_preset(name, skip_path_update=False):
                 # Update constraints checkbox
                 if cmds.checkBox("constraintsCheck", exists=True):
                     cmds.checkBox("constraintsCheck", edit=True, value=export_settings.get("constraints", False))
+                
+                # Update file type dropdown (Binary/ASCII)
+                if cmds.optionMenuGrp("fileTypeMenu", exists=True):
+                    file_type = export_settings.get("fileType", "ASCII")
+                    try:
+                        cmds.optionMenuGrp("fileTypeMenu", edit=True, value=file_type)
+                    except Exception as e:
+                        log_message("Could not set file type to '%s': %s" % (file_type, str(e)))
+                
+                # Update FBX version dropdown
+                if cmds.optionMenuGrp("fbxVerMenu", exists=True):
+                    fbx_version = export_settings.get("fbxVersion", "2018")
+                    try:
+                        cmds.optionMenuGrp("fbxVerMenu", edit=True, value=fbx_version)
+                    except Exception as e:
+                        log_message("Could not set FBX version to '%s': %s" % (fbx_version, str(e)))
                     
                 # Update export mode dropdown if it exists
                 if "exportMode" in export_settings and cmds.optionMenu("exportModeMenu", exists=True):
@@ -1921,13 +1943,85 @@ def set_fbx_export_settings(adjusted_start, adjusted_end, fbx_version, is_ascii=
         success = False
     return success
 
-def select_export_subset(root):
-    """Select the export subset starting from the root joint."""
+def select_export_subset(joints_to_export):
+    """
+    Select the export subset - all specified joints and optionally their hierarchies.
+    
+    Args:
+        joints_to_export: Single joint/locator string OR list of joints/locators to export
+    """
     try:
-        cmds.select(root, hierarchy=True)
-        log_message("Selected export subset starting from root: %s" % root)
+        # Handle both single joint and list of joints
+        if isinstance(joints_to_export, str):
+            joints_to_export = [joints_to_export]
+        
+        # Select all specified joints
+        all_selected = []
+        for joint in joints_to_export:
+            if cmds.objExists(joint):
+                # Select this joint and its hierarchy
+                cmds.select(joint, hierarchy=True, add=True if all_selected else False)
+                hierarchy = cmds.ls(selection=True, long=True)
+                for item in hierarchy:
+                    if item not in all_selected:
+                        all_selected.append(item)
+        
+        # Make sure all joints are selected
+        if all_selected:
+            cmds.select(all_selected, replace=True)
+        
+        selected = cmds.ls(selection=True, long=True)
+        log_message("Selected export subset: %d root joints, %d total objects" % (len(joints_to_export), len(selected)))
+        
+        # Check if verbose logging is enabled
+        verbose = is_verbose_logging_enabled()
+        if verbose:
+            log_message("[VERBOSE] ===== JOINT HIERARCHY FOR EXPORT =====")
+            joints = cmds.ls(selection=True, type="joint")
+            log_message("[VERBOSE] Total joints selected: %d" % len(joints))
+            for i, joint in enumerate(joints):
+                short_name = joint.split("|")[-1]
+                # Get animation data info
+                anim_curves = cmds.listConnections(joint, type="animCurve") or []
+                # Get transform values
+                try:
+                    tx, ty, tz = cmds.getAttr(joint + ".translate")[0]
+                    rx, ry, rz = cmds.getAttr(joint + ".rotate")[0]
+                    log_message("[VERBOSE] %3d. %s" % (i+1, short_name))
+                    log_message("[VERBOSE]      Trans: (%.3f, %.3f, %.3f)  Rot: (%.3f, %.3f, %.3f)" % (tx, ty, tz, rx, ry, rz))
+                    log_message("[VERBOSE]      Anim curves: %d" % len(anim_curves))
+                    if anim_curves:
+                        for curve in anim_curves[:5]:  # Show first 5 curves
+                            curve_type = cmds.nodeType(curve)
+                            key_count = cmds.keyframe(curve, query=True, keyframeCount=True) or 0
+                            log_message("[VERBOSE]        - %s (%s, %d keys)" % (curve, curve_type, key_count))
+                        if len(anim_curves) > 5:
+                            log_message("[VERBOSE]        ... and %d more curves" % (len(anim_curves) - 5))
+                except Exception as je:
+                    log_message("[VERBOSE] %3d. %s (error reading attrs: %s)" % (i+1, short_name, str(je)))
+            log_message("[VERBOSE] =========================================")
     except Exception as e:
         log_message("Error selecting export subset: %s" % str(e))
+
+
+def is_verbose_logging_enabled():
+    """Check if verbose logging is enabled in export process settings."""
+    try:
+        script_path = find_export_process_script()
+        if script_path:
+            if sys.version_info[0] >= 3:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("HaxExporterSettings", script_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                return module.is_verbose_logging_enabled()
+            else:
+                import imp
+                module = imp.load_source('HaxExporterSettings', script_path)
+                return module.is_verbose_logging_enabled()
+    except:
+        pass
+    return False
 
 def export_selected_clips():
     global clip_data, overwrite_all, skip_all
@@ -2066,19 +2160,23 @@ def export_clips(targets=None):
             namespace = get_selected_namespace()
     except Exception as e:
         log_message("Error checking selected namespace: %s" % str(e))
+    # joints_for_export will hold all joints to be exported
+    joints_for_export = []
+    
     if sel:
         # If joints/locators are explicitly selected, use them regardless of namespace
         valid_joints = [j for j in sel if cmds.objExists(j)]
         if valid_joints:
-            root = valid_joints[0]
-            log_message("Using selected root joint/locator: %s" % root)
+            joints_for_export = valid_joints
+            root = valid_joints[0]  # Keep root for compatibility
+            log_message("Using %d selected joints/locators" % len(joints_for_export))
             log_message("User has joints/locators selected - ignoring namespace filtering and preset joints")
     else:
         current_preset = cmds.optionMenu("presetDropdown", q=True, value=True) if cmds.optionMenu("presetDropdown", exists=True) else "<None>"
         if current_preset != "<None>":
             # Use skip_path_update=True to preserve all current settings during export
             preset_joints = load_preset(current_preset, skip_path_update=True)
-            log_message("Loaded preset joints while preserving current export settings")
+            log_message("Loaded preset with %d joints" % len(preset_joints))
             # Filter for existing joints and locators
             existing_joints = [j for j in preset_joints if cmds.objExists(j)]
             valid_joints = get_joints_and_locators(existing_joints)
@@ -2089,10 +2187,11 @@ def export_clips(targets=None):
                 except Exception as e:
                     log_message("Error filtering preset joints by namespace: %s" % str(e))
             if valid_joints:
-                root = valid_joints[0]
-                cmds.select(root, replace=True)
-                log_message("Selected preset root joint/locator: %s" % root)
-    if not root:
+                joints_for_export = valid_joints  # Use ALL preset joints
+                root = valid_joints[0]  # Keep root for compatibility
+                log_message("Using %d joints from preset '%s'" % (len(joints_for_export), current_preset))
+    
+    if not joints_for_export:
         error_message = "Select a root joint or locator before exporting."
         cmds.warning(error_message)
         cmds.confirmDialog(
@@ -2107,6 +2206,7 @@ def export_clips(targets=None):
         return
     log_message("Using root joint/locator: %s" % root)
     successful_exports = 0
+    exported_fbx_paths = []  # Track successfully exported FBX paths for Skyrim conversion
     try:
         clips_to_export = []
         log_message("\n-- Checking export paths for existing files --")
@@ -2192,6 +2292,9 @@ def export_clips(targets=None):
                 original_joints = []
                 original_root = root
                 
+                # Determine what joints to export
+                export_joints = joints_for_export if joints_for_export else [root]
+                
                 if export_settings.get("removeNamespaces", False) and has_namespace(root):
                     log_message("Remove Namespaces enabled - creating duplicate skeleton")
                     duplicate_root, duplicate_joints, original_joints = duplicate_skeleton_without_namespaces(root)
@@ -2201,13 +2304,14 @@ def export_clips(targets=None):
                         constrain_and_bake_skeleton(duplicate_joints, original_joints, adjusted_start, adjusted_end)
                         
                         # Use the duplicate skeleton for export
+                        export_joints = [duplicate_root]  # Use duplicate root with hierarchy
                         root = duplicate_root
                         log_message("Using duplicate skeleton for export: %s" % root)
                     else:
                         log_message("Failed to create duplicate skeleton, using original")
                 
-                select_export_subset(root)
-                log_message("Selected joint hierarchy")
+                select_export_subset(export_joints)
+                log_message("Selected %d joints for export" % len(cmds.ls(selection=True)))
                 set_fbx_export_settings(adjusted_start, adjusted_end, fbx_version, is_ascii)
                 export_details = []
                 export_details.append("Bake Animation: ON")
@@ -2242,7 +2346,7 @@ def export_clips(targets=None):
                     log_message("Primary export failed: %s" % str(e))
                     try:
                         log_message("Trying alternative export methods...")
-                        select_export_subset(root)
+                        select_export_subset(export_joints)
                         cmds.file(
                             out_path,
                             force=True,
@@ -2272,6 +2376,7 @@ def export_clips(targets=None):
                     duration = end_time - start_time
                     log_message("Export completed successfully! (%.2f seconds)" % duration)
                     successful_exports += 1
+                    exported_fbx_paths.append(out_path)  # Track for Skyrim conversion
                 else:
                     log_message("Export failed - file was not created")
                     raise Exception("Export failed - file was not created")
@@ -2340,6 +2445,11 @@ def export_clips(targets=None):
                     cancelButton="OK",
                     dismissString="OK"
                 )
+                
+                # Run Skyrim HKX conversion if enabled
+                if exported_fbx_paths:
+                    log_message("Checking for Skyrim HKX conversion...")
+                    run_skyrim_conversion(exported_fbx_paths)
         except Exception as e:
             log_message("Error during restoration: %s" % str(e))
             log_message("Try refreshing the UI manually if Maya seems unresponsive.")
@@ -3270,8 +3380,8 @@ def create_ui():
             export_settings["exportMode"] = mode
             save_scene_data()
             log_message("Export mode changed to: %s" % mode)
-        # Add Export Mode dropdown and right-justified HELP button on the same row
-        cmds.rowLayout(numberOfColumns=2, adjustableColumn=1, columnAlign=[(1, 'left'), (2, 'right')], columnAttach=[(1, 'both', 0), (2, 'right', 0)], width=700)
+        # Add Export Mode dropdown with right-justified SETTINGS and HELP buttons on the same row
+        cmds.rowLayout(numberOfColumns=3, adjustableColumn=1, columnAlign=[(1, 'left'), (2, 'right'), (3, 'right')], columnAttach=[(1, 'both', 0), (2, 'right', 5), (3, 'right', 0)], width=700)
         cmds.optionMenu("exportModeMenu", label="Export Mode",
                         changeCommand=export_mode_changed,
                         annotation="Choose export all or selected clips")
@@ -3284,15 +3394,22 @@ def create_ui():
                 cmds.optionMenu("exportModeMenu", edit=True, select=1)
             else:
                 cmds.optionMenu("exportModeMenu", edit=True, select=2)
+        # Right-justified SETTINGS button - bright orange for visibility
+        cmds.button(label="SETTINGS", width=90, height=24, bgc=(1.0, 0.55, 0.0),
+                    annotation="Configure Skyrim HKX export and other settings",
+                    command=lambda *_: run_skyrim_settings_and_update())
         # Right-justified HELP button, non-aggressive yellow
         cmds.button(label="HELP", width=80, height=24, bgc=(0.98, 0.92, 0.55),
                     annotation="Show detailed help for the Hax Game Exporter",
                     command=lambda *_: run_hax_exporter_helper())
         cmds.setParent("..")
         
-        # Add 5px spacing below Export Mode
-        cmds.columnLayout(adjustableColumn=True, height=5)
+        # Export Process indicator row - shows current export process prominently (hidden when Default)
+        cmds.rowLayout("exportProcessRow", numberOfColumns=1, adjustableColumn=1, height=22, visible=False)
+        cmds.text("exportProcessIndicator", label="", align="center", font="boldLabelFont",
+                  annotation="Current export process - click SETTINGS to change")
         cmds.setParent("..")
+        update_export_process_indicator()  # Initialize the indicator (will show/hide as needed)
         
         # Animation Clips Frame with non-scrollable buttons and scrollable clips
         cmds.frameLayout("clipsFrame", label="Animation Clips",
@@ -3315,11 +3432,25 @@ def create_ui():
                            annotation="Choose Binary or ASCII FBX")
         for ft in file_types:
             cmds.menuItem(label=ft, annotation=ft)
+        # Set initial file type selection from export_settings
+        try:
+            file_type = export_settings.get("fileType", "ASCII")
+            cmds.optionMenuGrp("fileTypeMenu", edit=True, value=file_type)
+        except Exception as e:
+            log_message("Could not initialize fileTypeMenu: %s" % str(e))
+        
         cmds.optionMenuGrp("fbxVerMenu", label="FBX Version",
                            changeCommand=lambda v: [export_settings.update({"fbxVersion":v}), save_scene_data()],
                            annotation="Choose FBX version year")
         for fv in fbx_versions:
             cmds.menuItem(label=fv, annotation=fv)
+        # Set initial FBX version selection from export_settings
+        try:
+            fbx_version = export_settings.get("fbxVersion", "2018")
+            cmds.optionMenuGrp("fbxVerMenu", edit=True, value=fbx_version)
+        except Exception as e:
+            log_message("Could not initialize fbxVerMenu: %s" % str(e))
+        
         def update_settings(*args):
             try:
                 export_settings.update({
@@ -3593,6 +3724,181 @@ def run_hax_exporter_helper():
         error_msg = 'Error running HaxExporterHelper.py: %s\n%s' % (str(e), traceback.format_exc())
         cmds.warning(error_msg)
         log_message(error_msg)
+
+def find_export_process_script():
+    """Find the HaxExporterSettings.py script in various locations."""
+    script_name = 'HaxExporterSettings.py'
+    
+    paths_to_try = []
+    
+    # Method 1: Look relative to this file (if __file__ is defined)
+    try:
+        if '__file__' in dir() or '__file__' in globals():
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            paths_to_try.append(os.path.join(base_dir, 'hax_exporter_data', 'Process', script_name))
+    except:
+        pass
+    
+    # Method 2: Look in Maya's user scripts directory
+    try:
+        maya_script_dir = cmds.internalVar(userScriptDir=True)
+        if maya_script_dir:
+            paths_to_try.append(os.path.join(maya_script_dir, 'hax_exporter_data', 'Process', script_name))
+    except:
+        pass
+    
+    # Method 3: Look in Maya's app scripts directory
+    try:
+        maya_app_dir = cmds.internalVar(userAppDir=True)
+        if maya_app_dir:
+            paths_to_try.append(os.path.join(maya_app_dir, 'scripts', 'hax_exporter_data', 'Process', script_name))
+    except:
+        pass
+    
+    # Method 4: Check MAYA_SCRIPT_PATH environment variable
+    try:
+        script_paths = os.environ.get('MAYA_SCRIPT_PATH', '').split(os.pathsep)
+        for sp in script_paths:
+            if sp:
+                paths_to_try.append(os.path.join(sp, 'hax_exporter_data', 'Process', script_name))
+    except:
+        pass
+    
+    # Try each path
+    for path in paths_to_try:
+        try:
+            normalized_path = os.path.normpath(path)
+            if os.path.exists(normalized_path):
+                log_message("Found HaxExporterSettings at: %s" % normalized_path)
+                return normalized_path
+        except:
+            pass
+    
+    # Debug: Log what we tried
+    log_message("Could not find %s. Tried paths:" % script_name)
+    for path in paths_to_try:
+        log_message("  - %s (exists: %s)" % (path, os.path.exists(path) if path else False))
+    
+    return None
+
+def get_current_export_process():
+    """Get the current export process setting from the scene."""
+    try:
+        script_path = find_export_process_script()
+        if script_path:
+            if sys.version_info[0] >= 3:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("HaxExporterSettings", script_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                return module.get_export_process()
+            else:
+                import imp
+                module = imp.load_source('HaxExporterSettings', script_path)
+                return module.get_export_process()
+    except:
+        pass
+    return "default"
+
+def update_export_process_indicator():
+    """Update the export process indicator label on the main UI. Hidden when Default."""
+    try:
+        if not cmds.rowLayout("exportProcessRow", exists=True):
+            return
+        if not cmds.text("exportProcessIndicator", exists=True):
+            return
+        
+        process = get_current_export_process()
+        
+        if process == "default":
+            # Default - hide the entire row
+            cmds.rowLayout("exportProcessRow", edit=True, visible=False)
+        elif process == "skyrim":
+            # Skyrim - bright cyan/teal to stand out, centered, bold
+            cmds.text("exportProcessIndicator", edit=True,
+                     label="⚡ Export Process: SKYRIM (FBX → HKX) ⚡",
+                     align="center",
+                     font="boldLabelFont",
+                     backgroundColor=(0.0, 0.5, 0.5))
+            cmds.rowLayout("exportProcessRow", edit=True, visible=True)
+        else:
+            # Unknown process - show it anyway, centered, bold
+            cmds.text("exportProcessIndicator", edit=True,
+                     label="Export Process: %s" % process.title(),
+                     align="center",
+                     font="boldLabelFont",
+                     backgroundColor=(0.4, 0.4, 0.2))
+            cmds.rowLayout("exportProcessRow", edit=True, visible=True)
+        
+        log_message("Export process indicator updated: %s" % process)
+    except Exception as e:
+        log_message("Error updating export process indicator: %s" % str(e))
+
+def run_skyrim_settings():
+    """Run the Export Process settings dialog."""
+    script_path = find_export_process_script()
+    
+    if not script_path:
+        error_msg = 'HaxExporterSettings.py not found. Please reinstall the Hax Game Exporter.'
+        cmds.warning(error_msg)
+        log_message(error_msg)
+        return
+    
+    try:
+        # Import and run the settings dialog
+        if sys.version_info[0] >= 3:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("HaxExporterSettings", script_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.show_settings_dialog()
+        else:
+            import imp
+            module = imp.load_source('HaxExporterSettings', script_path)
+            module.show_settings_dialog()
+    except Exception as e:
+        error_msg = 'Error opening settings: %s\n%s' % (str(e), traceback.format_exc())
+        cmds.warning(error_msg)
+        log_message(error_msg)
+
+def run_skyrim_settings_and_update():
+    """Run the Export Process settings dialog and update the indicator after."""
+    run_skyrim_settings()
+    # Update the indicator after the dialog closes
+    update_export_process_indicator()
+
+def run_skyrim_conversion(exported_fbx_paths):
+    """
+    Run post-export processing on exported FBX files.
+    Called after export completes.
+    
+    Args:
+        exported_fbx_paths: List of FBX file paths that were exported
+    
+    Returns:
+        bool: True if successful or no processing needed, False if errors occurred
+    """
+    script_path = find_export_process_script()
+    
+    if not script_path:
+        # Export process script not found - skip silently
+        return True
+    
+    try:
+        # Import and run the processing
+        if sys.version_info[0] >= 3:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("HaxExporterSettings", script_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.process_exported_files(exported_fbx_paths)
+        else:
+            import imp
+            module = imp.load_source('HaxExporterSettings', script_path)
+            return module.process_exported_files(exported_fbx_paths)
+    except Exception as e:
+        log_message('Error in export processing: %s\n%s' % (str(e), traceback.format_exc()))
+        return False
 
 # Namespace dropdown and filtering logic
 NAMESPACE_MENU = "namespaceDropdown"

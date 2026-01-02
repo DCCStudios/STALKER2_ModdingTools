@@ -233,6 +233,10 @@ def install_hax_game_exporter():
                 except Exception as e:
                     cmds.warning("Could not copy HaxExporterHelper.py: " + str(e))
         
+        # Note: ExportProcess_Skyrim.py is now inside hax_exporter_data/Process/
+        # It will be copied as part of the hax_exporter_data folder copy below
+        skyrim_copied = False  # Will be set to True if hax_exporter_data copy succeeds
+        
         # Copy the icon file if it exists
         icon_path = None
         if installer_dir:
@@ -273,6 +277,32 @@ def install_hax_game_exporter():
                         print("Preserving existing hax_exporter_data folder as requested")
                         data_preserved = True
                         data_copied = True  # Mark as "copied" since data exists
+                        
+                        # ALWAYS copy/update the Process folder (contains export process scripts)
+                        # even when preserving user data (presets, etc.)
+                        process_source = os.path.join(data_source, "Process")
+                        process_dest = os.path.join(data_dest, "Process")
+                        if os.path.exists(process_source):
+                            try:
+                                # Remove old Process folder and copy fresh
+                                if os.path.exists(process_dest):
+                                    shutil.rmtree(process_dest)
+                                shutil.copytree(process_source, process_dest)
+                                print("Updated Process folder with latest export process scripts")
+                            except Exception as pe:
+                                cmds.warning("Could not update Process folder: " + str(pe))
+                        
+                        # ALWAYS copy/update the Resources folder (contains help GIFs)
+                        resources_source = os.path.join(data_source, "Resources")
+                        resources_dest = os.path.join(data_dest, "Resources")
+                        if os.path.exists(resources_source):
+                            try:
+                                if os.path.exists(resources_dest):
+                                    shutil.rmtree(resources_dest)
+                                shutil.copytree(resources_source, resources_dest)
+                                print("Updated Resources folder with latest help files")
+                            except Exception as re:
+                                cmds.warning("Could not update Resources folder: " + str(re))
                     else:
                         # Try multiple times with delays if files are locked
                         import time
@@ -322,6 +352,23 @@ def install_hax_game_exporter():
         else:
             data_status = "NOT FOUND"
         
+        # Check if export process scripts exist in the copied data folder
+        settings_path = os.path.join(maya_script_dir, "hax_exporter_data", "Process", "HaxExporterSettings.py")
+        skyrim_path = os.path.join(maya_script_dir, "hax_exporter_data", "Process", "ExportProcess_Skyrim.py")
+        settings_copied = os.path.exists(settings_path)
+        skyrim_copied = os.path.exists(skyrim_path)
+        process_scripts_ok = settings_copied and skyrim_copied
+        
+        # Determine process scripts status
+        if process_scripts_ok:
+            process_status = "COPIED (HaxExporterSettings.py + ExportProcess_Skyrim.py)"
+        elif settings_copied:
+            process_status = "PARTIAL (missing ExportProcess_Skyrim.py)"
+        elif skyrim_copied:
+            process_status = "PARTIAL (missing HaxExporterSettings.py)"
+        else:
+            process_status = "NOT FOUND"
+        
         status_lines = [
             "Script location: {}".format(destination_file),
             "",
@@ -329,6 +376,7 @@ def install_hax_game_exporter():
             "",
             "INSTALLATION STATUS:",
             "- HaxExporterHelper.py: {}".format("COPIED" if helper_copied else "NOT FOUND"),
+            "- Export Process Scripts: {}".format(process_status),
             "- hax_exporter_data folder: {}".format(data_status)
         ]
         

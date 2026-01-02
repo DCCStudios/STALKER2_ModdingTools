@@ -1,0 +1,2341 @@
+"""
+Export Process: Skyrim - HKX Animation Conversion
+Compatible with Maya 2025 (Python 3, PySide6) and Maya 2022- (Python 2, PySide2)
+
+This module provides post-export FBX to HKX conversion for Skyrim animations.
+It registers itself with the HaxExporterSettings system.
+
+The FBX parsing and XML generation is done directly in this script for better
+debugging and validation. Only blender-hkx.exe is called externally for final packing.
+"""
+
+from __future__ import print_function
+import sys
+import os
+import json
+import subprocess
+import shutil
+import re
+import math
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+
+# Maya imports
+import maya.cmds as cmds
+
+# PySide compatibility for Maya versions
+try:
+    from PySide6 import QtCore, QtGui, QtWidgets
+    PYSIDE_VERSION = 6
+except ImportError:
+    try:
+        from PySide2 import QtCore, QtGui, QtWidgets
+        PYSIDE_VERSION = 2
+    except ImportError:
+        PYSIDE_VERSION = None
+
+# Import the settings system
+# When loaded by HaxExporterSettings.discover_and_load_processes(),
+# HaxExporterSettings is available as a direct import
+try:
+    import HaxExporterSettings
+except ImportError:
+    try:
+        from . import HaxExporterSettings
+    except ImportError:
+        HaxExporterSettings = None
+        print("[ExportProcess_Skyrim] Warning: Could not import HaxExporterSettings")
+
+# Process ID and display name
+PROCESS_ID = "skyrim"
+PROCESS_NAME = "Skyrim (FBX → HKX)"
+
+# Settings storage
+SETTINGS_ATTR = "skyrimProcessSettings"
+
+# Available skeleton files - (Display Name, Filename)
+SKELETON_OPTIONS = [
+    ("Male (Default)", "Skeleton.hkx"),
+    ("1st Person", "1skeleton.hkx"),
+    ("Female", "femskeleton.hkx"),
+    ("XP32", "xpskeleton.hkx"),
+    ("XPMS", "skeleton242.hkx"),
+    ("Giant", "GiantSkeleton.hkx"),
+    ("Draugr", "Draugrskeleton.hkx"),
+    ("Falmer", "Falmerskeleton.hkx"),
+]
+
+# Target game formats
+TARGET_OPTIONS = [
+    ("Skyrim SE / AE (64-bit)", "AMD64"),
+    ("Skyrim LE (32-bit)", "WIN32")
+]
+
+# Havok method skeleton options - (Display Name, skeleton file, bonelist file)
+HAVOK_SKELETON_OPTIONS = [
+    ("Default", "skeleton.hkx", "bonelist.txt"),
+    ("1st Person", "1skeleton.hkx", "bonelist1st.txt"),
+]
+
+DEFAULT_SETTINGS = {
+    "hkxToolPath": "",
+    "skeleton": "Skeleton.hkx",
+    "targetGame": "AMD64",
+    "keepXml": False,
+    "useHavokTools": False,
+    "havokToolsPath": "",
+    "havokSkeleton": "Default"
+}
+
+# Common Havok Content Tools installation paths to check for auto-detection
+HAVOK_SEARCH_PATHS = [
+    r"C:\Program Files\Havok\HavokContentTools",
+    r"C:\Program Files (x86)\Havok\HavokContentTools",
+    r"D:\Program Files\Havok\HavokContentTools",
+    r"D:\Program Files (x86)\Havok\HavokContentTools",
+]
+
+
+def auto_detect_havok_path():
+    """Auto-detect Havok Content Tools installation path."""
+    for path in HAVOK_SEARCH_PATHS:
+        if os.path.isdir(path):
+            filter_manager = os.path.join(path, "hctStandAloneFilterManager.exe")
+            if os.path.exists(filter_manager):
+                return path
+    return ""
+
+# Skyrim bone names for proper naming (from bonelist.txt)
+SKYRIM_BONE_LIST = [
+    "NPC Root [Root]",
+    "x_NPC LookNode [Look]",
+    "x_NPC Translate [Pos ]",
+    "x_NPC Rotate [Rot ]",
+    "NPC COM [COM ]",
+    "NPC Pelvis [Pelv]",
+    "NPC Thigh [Thg].L",
+    "NPC Calf [Clf].L",
+    "NPC Foot [ft ].L",
+    "NPC Thigh [Thg].R",
+    "NPC Calf [Clf].R",
+    "NPC Foot [ft ].R",
+    "SkirtRBone01", "SkirtRBone02", "SkirtRBone03",
+    "SkirtLBone01", "SkirtLBone02", "SkirtLBone03",
+    "SkirtBBone01", "SkirtBBone02", "SkirtBBone03",
+    "SkirtFBone01", "SkirtFBone02", "SkirtFBone03",
+    "NPC Spine [Spn0]",
+    "NPC Spine1 [Spn1]",
+    "NPC Spine2 [Spn2]",
+    "NPC Clavicle [Clv].L",
+    "NPC UpperArm [Uar].L",
+    "NPC Forearm [Lar].L",
+    "NPC Clavicle [Clv].R",
+    "NPC UpperArm [Uar].R",
+    "NPC Forearm [Lar].R",
+    "AnimObjectA", "AnimObjectB",
+    "NPC Neck [Neck]",
+    "NPC Head [Head]",
+    "NPCEyeBone",
+    "NPC Hand [Hnd].L",
+    "NPC Hand [Hnd].R",
+    "AnimObjectL", "AnimObjectR",
+    "SHIELD", "WEAPON",
+    "NPC L Pauldron", "NPC R Pauldron",
+    "MagicEffectsNode",
+    "NPC MagicNode [Mag].L",
+    "NPC MagicNode [Mag].R",
+    "NPC Head MagicNode [Hmag]",
+    "NPC Toe0 [Toe].L",
+    "NPC Toe0 [Toe].R",
+    "NPC ForearmTwist1 [Lt1].L",
+    "NPC ForearmTwist2 [Lt2].L",
+    "NPC UpperarmTwist1 [Ut1].L",
+    "NPC UpperarmTwist2 [Ut2].L",
+    "NPC ForearmTwist1 [Lt1].R",
+    "NPC ForearmTwist2 [Lt2].R",
+    "NPC UpperarmTwist1 [Ut1].R",
+    "NPC UpperarmTwist2 [Ut2].R",
+    "QUIVER",
+    "WeaponAxe", "WeaponBack", "WeaponBow", "WeaponDagger", "WeaponMace", "WeaponSword",
+    "NPC Finger00 [F00].L", "NPC Finger01 [F01].L", "NPC Finger02 [F02].L",
+    "NPC Finger10 [F10].L", "NPC Finger11 [F11].L", "NPC Finger12 [F12].L",
+    "NPC Finger20 [F20].L", "NPC Finger21 [F21].L", "NPC Finger22 [F22].L",
+    "NPC Finger30 [F30].L", "NPC Finger31 [F31].L", "NPC Finger32 [F32].L",
+    "NPC Finger40 [F40].L", "NPC Finger41 [F41].L", "NPC Finger42 [F42].L",
+    "NPC Finger00 [F00].R", "NPC Finger01 [F01].R", "NPC Finger02 [F02].R",
+    "NPC Finger10 [F10].R", "NPC Finger11 [F11].R", "NPC Finger12 [F12].R",
+    "NPC Finger20 [F20].R", "NPC Finger21 [F21].R", "NPC Finger22 [F22].R",
+    "NPC Finger30 [F30].R", "NPC Finger31 [F31].R", "NPC Finger32 [F32].R",
+    "NPC Finger40 [F40].R", "NPC Finger41 [F41].R", "NPC Finger42 [F42].R",
+    "Camera3rd [Cam3]", "Camera Control"
+]
+
+# Maya rig to Skyrim bone name mapping
+# Maya rigs often use: "NPC L BodyPart [LCode]" format
+# Skyrim uses: "NPC BodyPart [Code].L" format
+# This maps Maya-encoded names to Skyrim names
+MAYA_TO_SKYRIM_BONE_MAP = {
+    # Legs
+    "NPC_s_L_s_Thigh_s__ob_LThg_cb_": "NPC Thigh [Thg].L",
+    "NPC_s_R_s_Thigh_s__ob_RThg_cb_": "NPC Thigh [Thg].R",
+    "NPC_s_L_s_Calf_s__ob_LClf_cb_": "NPC Calf [Clf].L",
+    "NPC_s_R_s_Calf_s__ob_RClf_cb_": "NPC Calf [Clf].R",
+    "NPC_s_L_s_Foot_s__ob_Lft_s__cb_": "NPC Foot [ft ].L",
+    "NPC_s_R_s_Foot_s__ob_Rft_s__cb_": "NPC Foot [ft ].R",
+    "NPC_s_L_s_Toe0_s__ob_LToe_cb_": "NPC Toe0 [Toe].L",
+    "NPC_s_R_s_Toe0_s__ob_RToe_cb_": "NPC Toe0 [Toe].R",
+    
+    # Arms
+    "NPC_s_L_s_Clavicle_s__ob_LClv_cb_": "NPC Clavicle [Clv].L",
+    "NPC_s_R_s_Clavicle_s__ob_RClv_cb_": "NPC Clavicle [Clv].R",
+    "NPC_s_L_s_UpperArm_s__ob_LUar_cb_": "NPC UpperArm [Uar].L",
+    "NPC_s_R_s_UpperArm_s__ob_RUar_cb_": "NPC UpperArm [Uar].R",
+    "NPC_s_L_s_Forearm_s__ob_LLar_cb_": "NPC Forearm [Lar].L",
+    "NPC_s_R_s_Forearm_s__ob_RLar_cb_": "NPC Forearm [Lar].R",
+    "NPC_s_L_s_Hand_s__ob_LHnd_cb_": "NPC Hand [Hnd].L",
+    "NPC_s_R_s_Hand_s__ob_RHnd_cb_": "NPC Hand [Hnd].R",
+    
+    # Arm twists
+    "NPC_s_L_s_ForearmTwist1_s__ob_LLt1_cb_": "NPC ForearmTwist1 [Lt1].L",
+    "NPC_s_R_s_ForearmTwist1_s__ob_RLt1_cb_": "NPC ForearmTwist1 [Lt1].R",
+    "NPC_s_L_s_ForearmTwist2_s__ob_LLt2_cb_": "NPC ForearmTwist2 [Lt2].L",
+    "NPC_s_R_s_ForearmTwist2_s__ob_RLt2_cb_": "NPC ForearmTwist2 [Lt2].R",
+    "NPC_s_L_s_UpperarmTwist1_s__ob_LUt1_cb_": "NPC UpperarmTwist1 [Ut1].L",
+    "NPC_s_R_s_UpperarmTwist1_s__ob_RUt1_cb_": "NPC UpperarmTwist1 [Ut1].R",
+    "NPC_s_L_s_UpperarmTwist2_s__ob_LUt2_cb_": "NPC UpperarmTwist2 [Ut2].L",
+    "NPC_s_R_s_UpperarmTwist2_s__ob_RUt2_cb_": "NPC UpperarmTwist2 [Ut2].R",
+    
+    # Magic nodes
+    "NPC_s_L_s_MagicNode_s__ob_LMag_cb_": "NPC MagicNode [Mag].L",
+    "NPC_s_R_s_MagicNode_s__ob_RMag_cb_": "NPC MagicNode [Mag].R",
+    
+    # Fingers - Left
+    "NPC_s_L_s_Finger00_s__ob_LF00_cb_": "NPC Finger00 [F00].L",
+    "NPC_s_L_s_Finger01_s__ob_LF01_cb_": "NPC Finger01 [F01].L",
+    "NPC_s_L_s_Finger02_s__ob_LF02_cb_": "NPC Finger02 [F02].L",
+    "NPC_s_L_s_Finger10_s__ob_LF10_cb_": "NPC Finger10 [F10].L",
+    "NPC_s_L_s_Finger11_s__ob_LF11_cb_": "NPC Finger11 [F11].L",
+    "NPC_s_L_s_Finger12_s__ob_LF12_cb_": "NPC Finger12 [F12].L",
+    "NPC_s_L_s_Finger20_s__ob_LF20_cb_": "NPC Finger20 [F20].L",
+    "NPC_s_L_s_Finger21_s__ob_LF21_cb_": "NPC Finger21 [F21].L",
+    "NPC_s_L_s_Finger22_s__ob_LF22_cb_": "NPC Finger22 [F22].L",
+    "NPC_s_L_s_Finger30_s__ob_LF30_cb_": "NPC Finger30 [F30].L",
+    "NPC_s_L_s_Finger31_s__ob_LF31_cb_": "NPC Finger31 [F31].L",
+    "NPC_s_L_s_Finger32_s__ob_LF32_cb_": "NPC Finger32 [F32].L",
+    "NPC_s_L_s_Finger40_s__ob_LF40_cb_": "NPC Finger40 [F40].L",
+    "NPC_s_L_s_Finger41_s__ob_LF41_cb_": "NPC Finger41 [F41].L",
+    "NPC_s_L_s_Finger42_s__ob_LF42_cb_": "NPC Finger42 [F42].L",
+    
+    # Fingers - Right
+    "NPC_s_R_s_Finger00_s__ob_RF00_cb_": "NPC Finger00 [F00].R",
+    "NPC_s_R_s_Finger01_s__ob_RF01_cb_": "NPC Finger01 [F01].R",
+    "NPC_s_R_s_Finger02_s__ob_RF02_cb_": "NPC Finger02 [F02].R",
+    "NPC_s_R_s_Finger10_s__ob_RF10_cb_": "NPC Finger10 [F10].R",
+    "NPC_s_R_s_Finger11_s__ob_RF11_cb_": "NPC Finger11 [F11].R",
+    "NPC_s_R_s_Finger12_s__ob_RF12_cb_": "NPC Finger12 [F12].R",
+    "NPC_s_R_s_Finger20_s__ob_RF20_cb_": "NPC Finger20 [F20].R",
+    "NPC_s_R_s_Finger21_s__ob_RF21_cb_": "NPC Finger21 [F21].R",
+    "NPC_s_R_s_Finger22_s__ob_RF22_cb_": "NPC Finger22 [F22].R",
+    "NPC_s_R_s_Finger30_s__ob_RF30_cb_": "NPC Finger30 [F30].R",
+    "NPC_s_R_s_Finger31_s__ob_RF31_cb_": "NPC Finger31 [F31].R",
+    "NPC_s_R_s_Finger32_s__ob_RF32_cb_": "NPC Finger32 [F32].R",
+    "NPC_s_R_s_Finger40_s__ob_RF40_cb_": "NPC Finger40 [F40].R",
+    "NPC_s_R_s_Finger41_s__ob_RF41_cb_": "NPC Finger41 [F41].R",
+    "NPC_s_R_s_Finger42_s__ob_RF42_cb_": "NPC Finger42 [F42].R",
+    
+    # Camera
+    "Camera3rd_s__ob_Cam3_cb_": "Camera3rd [Cam3]",
+    "Camera1st_s__ob_Cam1_cb_": "Camera1st [Cam1]",
+    "Camera_s_Control": "Camera Control",
+}
+
+
+def log_message(message):
+    """Log a message"""
+    print("[Skyrim Export] " + str(message))
+
+
+def log_verbose(message):
+    """Log a verbose message (only if verbose logging is enabled)"""
+    try:
+        if HaxExporterSettings and HaxExporterSettings.get_verbose_logging():
+            print("[Skyrim Export] [VERBOSE] " + str(message))
+    except:
+        pass
+
+
+def is_verbose():
+    """Check if verbose logging is enabled"""
+    try:
+        return HaxExporterSettings and HaxExporterSettings.get_verbose_logging()
+    except:
+        return False
+
+
+def load_settings():
+    """Load Skyrim-specific settings from scene"""
+    try:
+        node = HaxExporterSettings.get_settings_node()
+        if cmds.attributeQuery(SETTINGS_ATTR, node=node, exists=True):
+            settings_json = cmds.getAttr(node + "." + SETTINGS_ATTR)
+            if settings_json:
+                settings = json.loads(settings_json)
+                merged = DEFAULT_SETTINGS.copy()
+                merged.update(settings)
+                return merged
+    except Exception as e:
+        log_message("Error loading settings: %s" % str(e))
+    return DEFAULT_SETTINGS.copy()
+
+
+def save_settings(settings):
+    """Save Skyrim-specific settings to scene"""
+    try:
+        node = HaxExporterSettings.get_settings_node()
+        if not cmds.attributeQuery(SETTINGS_ATTR, node=node, exists=True):
+            cmds.addAttr(node, longName=SETTINGS_ATTR, dataType="string")
+        cmds.setAttr(node + "." + SETTINGS_ATTR, json.dumps(settings), type="string")
+    except Exception as e:
+        log_message("Error saving settings: %s" % str(e))
+
+
+def validate_tool_path(path, use_havok=False):
+    """Validate the HKX Conversion Tool path"""
+    if not path or not os.path.isdir(path):
+        return False, "Path does not exist"
+    
+    if use_havok:
+        # For Havok method, we need FBXImporter.exe and config files
+        fbx_importer = os.path.join(path, "FBXImporter.exe")
+        if not os.path.exists(fbx_importer):
+            return False, "FBXImporter.exe not found"
+        
+        config_file = os.path.join(path, "example.config.hko")
+        if not os.path.exists(config_file):
+            return False, "example.config.hko not found"
+        
+        bonelist_file = os.path.join(path, "bonelist.txt")
+        if not os.path.exists(bonelist_file):
+            return False, "bonelist.txt not found"
+    else:
+        # For default method, we need blender-hkx.exe
+        blender_hkx = os.path.join(path, "blender-hkx.exe")
+        if not os.path.exists(blender_hkx):
+            return False, "blender-hkx.exe not found"
+    
+    return True, "Valid"
+
+
+class HavokSettingsDialog(QtWidgets.QDialog):
+    """Dialog for Havok Content Tools settings"""
+    
+    def __init__(self, parent=None):
+        super(HavokSettingsDialog, self).__init__(parent)
+        self.setWindowTitle("Havok Export Settings")
+        self.setMinimumWidth(500)
+        self.settings = load_settings()
+        self.create_ui()
+        self.load_settings()
+    
+    def create_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(10)
+        
+        # Title
+        title = QtWidgets.QLabel("<b>Havok Content Tools Configuration</b>")
+        title.setStyleSheet("font-size: 12pt;")
+        layout.addWidget(title)
+        
+        # Havok Content Tools Path
+        path_label = QtWidgets.QLabel("Havok Content Tools Path:")
+        layout.addWidget(path_label)
+        
+        path_row = QtWidgets.QHBoxLayout()
+        self.havok_path_field = QtWidgets.QLineEdit()
+        self.havok_path_field.setPlaceholderText("C:\\Program Files\\Havok\\HavokContentTools")
+        self.havok_path_field.textChanged.connect(self.validate_paths)
+        path_row.addWidget(self.havok_path_field)
+        
+        browse_btn = QtWidgets.QPushButton("Browse...")
+        browse_btn.setMaximumWidth(80)
+        browse_btn.clicked.connect(self.browse_havok_path)
+        path_row.addWidget(browse_btn)
+        layout.addLayout(path_row)
+        
+        self.havok_status_label = QtWidgets.QLabel("")
+        layout.addWidget(self.havok_status_label)
+        
+        # Separator
+        sep = QtWidgets.QFrame()
+        sep.setFrameShape(QtWidgets.QFrame.HLine)
+        layout.addWidget(sep)
+        
+        # Skeleton selection
+        skel_row = QtWidgets.QHBoxLayout()
+        skel_row.addWidget(QtWidgets.QLabel("Skeleton:"))
+        self.skeleton_combo = QtWidgets.QComboBox()
+        for display_name, skel_file, bonelist_file in HAVOK_SKELETON_OPTIONS:
+            self.skeleton_combo.addItem(display_name, (skel_file, bonelist_file))
+        self.skeleton_combo.currentIndexChanged.connect(self.validate_paths)
+        skel_row.addWidget(self.skeleton_combo)
+        skel_row.addStretch()
+        layout.addLayout(skel_row)
+        
+        # Info
+        info = QtWidgets.QLabel(
+            "<b>Required files in HKX Tool folder:</b><br>"
+            "• FBXImporter.exe<br>"
+            "• example.config.hko<br>"
+            "• skeleton.hkx + bonelist.txt (for Default)<br>"
+            "• 1skeleton.hkx + bonelist1st.txt (for 1st Person)"
+        )
+        info.setStyleSheet("color: #888; font-size: 9pt; background: #333; padding: 8px; border-radius: 4px;")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        
+        layout.addStretch()
+        
+        # Buttons
+        btn_layout = QtWidgets.QHBoxLayout()
+        btn_layout.addStretch()
+        
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(cancel_btn)
+        
+        save_btn = QtWidgets.QPushButton("Save")
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self.save_and_close)
+        btn_layout.addWidget(save_btn)
+        
+        layout.addLayout(btn_layout)
+    
+    def load_settings(self):
+        # Auto-detect if not set
+        havok_path = self.settings.get("havokToolsPath", "")
+        if not havok_path:
+            havok_path = auto_detect_havok_path()
+        self.havok_path_field.setText(havok_path)
+        
+        # Skeleton
+        havok_skel = self.settings.get("havokSkeleton", "Default")
+        for i in range(self.skeleton_combo.count()):
+            if self.skeleton_combo.itemText(i) == havok_skel:
+                self.skeleton_combo.setCurrentIndex(i)
+                break
+        
+        self.validate_paths()
+    
+    def browse_havok_path(self):
+        current = self.havok_path_field.text()
+        if not current or not os.path.isdir(current):
+            current = "C:\\Program Files\\Havok"
+        
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Select Havok Content Tools Folder", current,
+            QtWidgets.QFileDialog.ShowDirsOnly
+        )
+        if path:
+            self.havok_path_field.setText(path)
+    
+    def validate_paths(self):
+        havok_path = self.havok_path_field.text()
+        errors = []
+        
+        if not havok_path:
+            self.havok_status_label.setText("")
+            return False
+        
+        if not os.path.isdir(havok_path):
+            errors.append("Havok path does not exist")
+        else:
+            filter_manager = os.path.join(havok_path, "hctStandAloneFilterManager.exe")
+            if not os.path.exists(filter_manager):
+                errors.append("hctStandAloneFilterManager.exe not found")
+        
+        if errors:
+            self.havok_status_label.setText("✗ " + "; ".join(errors))
+            self.havok_status_label.setStyleSheet("color: #f44336; font-weight: bold;")
+            return False
+        else:
+            self.havok_status_label.setText("✓ Havok Content Tools found")
+            self.havok_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            return True
+    
+    def save_and_close(self):
+        self.settings["havokToolsPath"] = self.havok_path_field.text()
+        self.settings["havokSkeleton"] = self.skeleton_combo.currentText()
+        save_settings(self.settings)
+        self.accept()
+
+
+class SkyrimSettingsWidget(QtWidgets.QWidget):
+    """Widget containing Skyrim-specific settings"""
+    
+    def __init__(self, parent=None):
+        super(SkyrimSettingsWidget, self).__init__(parent)
+        self.settings = load_settings()
+        self.create_ui()
+        self.load_current_settings()
+    
+    def create_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 10, 0, 0)
+        layout.setSpacing(8)
+        
+        # Path section
+        path_label = QtWidgets.QLabel("HKX Conversion Tool Path:")
+        layout.addWidget(path_label)
+        
+        path_row = QtWidgets.QHBoxLayout()
+        self.path_field = QtWidgets.QLineEdit()
+        self.path_field.setPlaceholderText("Path to HKX Conversion Tool folder...")
+        self.path_field.textChanged.connect(self.on_path_changed)
+        path_row.addWidget(self.path_field)
+        
+        browse_btn = QtWidgets.QPushButton("Browse...")
+        browse_btn.setMaximumWidth(80)
+        browse_btn.clicked.connect(self.browse_path)
+        path_row.addWidget(browse_btn)
+        layout.addLayout(path_row)
+        
+        self.status_label = QtWidgets.QLabel("")
+        layout.addWidget(self.status_label)
+        
+        # Options row - Skeleton and Target (used for default blender-hkx method)
+        options_layout = QtWidgets.QHBoxLayout()
+        
+        options_layout.addWidget(QtWidgets.QLabel("Skeleton:"))
+        self.skeleton_combo = QtWidgets.QComboBox()
+        for display_name, filename in SKELETON_OPTIONS:
+            self.skeleton_combo.addItem(display_name, filename)
+        options_layout.addWidget(self.skeleton_combo)
+        
+        options_layout.addSpacing(20)
+        
+        options_layout.addWidget(QtWidgets.QLabel("Target:"))
+        self.target_combo = QtWidgets.QComboBox()
+        for display, value in TARGET_OPTIONS:
+            self.target_combo.addItem(display, value)
+        options_layout.addWidget(self.target_combo)
+        
+        options_layout.addStretch()
+        layout.addLayout(options_layout)
+        
+        # Keep XML checkbox
+        self.keep_xml_checkbox = QtWidgets.QCheckBox("Keep generated XML file (for debugging)")
+        self.keep_xml_checkbox.setToolTip(
+            "When enabled, the intermediate XML file used for HKX conversion will be kept.\n"
+            "Useful for debugging conversion issues or manual editing."
+        )
+        layout.addWidget(self.keep_xml_checkbox)
+        
+        # Separator
+        sep = QtWidgets.QFrame()
+        sep.setFrameShape(QtWidgets.QFrame.HLine)
+        sep.setFrameShadow(QtWidgets.QFrame.Sunken)
+        layout.addWidget(sep)
+        
+        # Alternative export method section
+        havok_row = QtWidgets.QHBoxLayout()
+        self.use_havok_checkbox = QtWidgets.QCheckBox("Alternative Export Method (Havok Content Tools)")
+        self.use_havok_checkbox.setToolTip(
+            "Use FBXImporter.exe + Havok Content Tools instead of blender-hkx.\n"
+            "Requires Havok Content Tools to be installed.\n"
+            "May produce better results for some animations."
+        )
+        havok_row.addWidget(self.use_havok_checkbox)
+        
+        self.havok_settings_btn = QtWidgets.QPushButton("Havok Settings...")
+        self.havok_settings_btn.setMaximumWidth(120)
+        self.havok_settings_btn.clicked.connect(self.show_havok_settings_dialog)
+        self.havok_settings_btn.setEnabled(False)
+        havok_row.addWidget(self.havok_settings_btn)
+        havok_row.addStretch()
+        layout.addLayout(havok_row)
+        
+        # Connect checkbox to enable/disable button - use toggled signal
+        self.use_havok_checkbox.toggled.connect(self.on_havok_toggle)
+        
+        # Havok status label (shows current Havok settings summary)
+        self.havok_summary_label = QtWidgets.QLabel("")
+        self.havok_summary_label.setStyleSheet("color: #888; font-size: 9pt; margin-left: 20px;")
+        layout.addWidget(self.havok_summary_label)
+        
+        # Info text
+        info_label = QtWidgets.QLabel(
+            "<b>Note:</b> FBX files must be exported as ASCII format. "
+            "The HKX Conversion Tool folder should contain blender-hkx.exe."
+        )
+        info_label.setStyleSheet("color: #888; font-size: 9pt;")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+    
+    def load_current_settings(self):
+        self.settings = load_settings()
+        self.path_field.setText(self.settings.get("hkxToolPath", ""))
+        
+        skel = self.settings.get("skeleton", "Skeleton.hkx")
+        # Find by data (filename) rather than display text
+        for i in range(self.skeleton_combo.count()):
+            if self.skeleton_combo.itemData(i) == skel:
+                self.skeleton_combo.setCurrentIndex(i)
+                break
+        
+        target = self.settings.get("targetGame", "AMD64")
+        for i in range(self.target_combo.count()):
+            if self.target_combo.itemData(i) == target:
+                self.target_combo.setCurrentIndex(i)
+                break
+        
+        self.keep_xml_checkbox.setChecked(self.settings.get("keepXml", False))
+        
+        # Alternative method settings
+        use_havok = self.settings.get("useHavokTools", False)
+        self.use_havok_checkbox.setChecked(use_havok)
+        self.havok_settings_btn.setEnabled(use_havok)
+        self.update_havok_summary()
+        
+        self.validate_path()
+    
+    def browse_path(self):
+        current = self.path_field.text()
+        if not current or not os.path.isdir(current):
+            current = ""
+        
+        path = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Select HKX Conversion Tool Folder", current,
+            QtWidgets.QFileDialog.ShowDirsOnly
+        )
+        if path:
+            self.path_field.setText(path)
+    
+    def on_path_changed(self):
+        self.validate_path()
+    
+    def validate_path(self):
+        path = self.path_field.text()
+        if not path:
+            self.status_label.setText("")
+            self.status_label.setStyleSheet("")
+            return False
+        
+        use_havok = self.use_havok_checkbox.isChecked()
+        valid, msg = validate_tool_path(path, use_havok)
+        if valid:
+            self.status_label.setText("✓ " + msg)
+            self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        else:
+            self.status_label.setText("✗ " + msg)
+            self.status_label.setStyleSheet("color: #f44336; font-weight: bold;")
+        return valid
+    
+    def validate(self):
+        """Validate settings before saving. Returns True if valid."""
+        if not self.validate_path():
+            QtWidgets.QMessageBox.warning(
+                self, "Invalid Path",
+                "Please provide a valid HKX Conversion Tool path."
+            )
+            return False
+        
+        # If using Havok tools, check that the path is set
+        if self.use_havok_checkbox.isChecked():
+            settings = load_settings()
+            havok_path = settings.get("havokToolsPath", "")
+            if not havok_path or not os.path.isdir(havok_path):
+                QtWidgets.QMessageBox.warning(
+                    self, "Havok Settings Required",
+                    "Please click 'Havok Settings...' and configure the Havok Content Tools path."
+                )
+                return False
+        return True
+    
+    def on_havok_toggle(self, checked=None):
+        """Toggle Havok settings button enabled state"""
+        # If called from toggled signal, checked is the boolean state
+        # Otherwise use isChecked()
+        if checked is None:
+            checked = self.use_havok_checkbox.isChecked()
+        self.havok_settings_btn.setEnabled(checked)
+        self.update_havok_summary()
+        self.validate_path()
+    
+    def show_havok_settings_dialog(self):
+        """Show the Havok settings dialog"""
+        dialog = HavokSettingsDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Reload settings after dialog closes
+            self.settings = load_settings()
+            self.update_havok_summary()
+    
+    def update_havok_summary(self):
+        """Update the Havok settings summary label"""
+        if self.use_havok_checkbox.isChecked():
+            settings = load_settings()
+            havok_path = settings.get("havokToolsPath", "")
+            havok_skel = settings.get("havokSkeleton", "Default")
+            
+            if havok_path:
+                path_short = os.path.basename(havok_path) or havok_path
+                self.havok_summary_label.setText(
+                    "Havok: %s | Skeleton: %s" % (path_short, havok_skel)
+                )
+            else:
+                self.havok_summary_label.setText(
+                    "<span style='color: #f44336;'>⚠ Havok path not set - click 'Havok Settings...'</span>"
+                )
+        else:
+            self.havok_summary_label.setText("")
+    
+    def save_settings(self):
+        """Save current settings"""
+        self.settings["hkxToolPath"] = self.path_field.text()
+        self.settings["skeleton"] = self.skeleton_combo.currentData()  # Save filename, not display name
+        self.settings["targetGame"] = self.target_combo.currentData()
+        self.settings["keepXml"] = self.keep_xml_checkbox.isChecked()
+        self.settings["useHavokTools"] = self.use_havok_checkbox.isChecked()
+        # Note: havokToolsPath and havokSkeleton are saved by HavokSettingsDialog
+        save_settings(self.settings)
+
+
+# ============================================================================
+# FBX PARSER AND HKX XML GENERATOR
+# Ported from fbx_ascii_to_hkx.py for better integration and debugging
+# ============================================================================
+
+def decode_bone_name(encoded_name):
+    """
+    Decode Maya-encoded bone names back to Skyrim format.
+    Maya can't handle spaces and brackets in joint names, so they get encoded:
+        _s_  -> (space)
+        _ob_ -> [
+        _cb_ -> ]
+    """
+    decoded = encoded_name
+    decoded = decoded.replace('_s_', ' ')
+    decoded = decoded.replace('_ob_', '[')
+    decoded = decoded.replace('_cb_', ']')
+    return decoded
+
+
+def euler_to_quaternion(rx, ry, rz):
+    """Convert Euler angles (degrees) to quaternion (w, x, y, z)."""
+    rx = math.radians(rx)
+    ry = math.radians(ry)
+    rz = math.radians(rz)
+    
+    cx = math.cos(rx / 2)
+    sx = math.sin(rx / 2)
+    cy = math.cos(ry / 2)
+    sy = math.sin(ry / 2)
+    cz = math.cos(rz / 2)
+    sz = math.sin(rz / 2)
+    
+    # XYZ order
+    w = cx * cy * cz + sx * sy * sz
+    x = sx * cy * cz - cx * sy * sz
+    y = cx * sy * cz + sx * cy * sz
+    z = cx * cy * sz - sx * sy * cz
+    
+    return (w, x, y, z)
+
+
+def multiply_quaternions(q1, q2):
+    """Multiply two quaternions (w, x, y, z)."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    
+    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+    y = w1*y2 - x1*z2 + y1*w2 + z1*x2
+    z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+    
+    return (w, x, y, z)
+
+
+def rotate_vector_by_quat(v, q):
+    """Rotate a vector by a quaternion."""
+    w, x, y, z = q
+    vx, vy, vz = v
+    
+    t = [
+        2 * (y * vz - z * vy),
+        2 * (z * vx - x * vz),
+        2 * (x * vy - y * vx)
+    ]
+    
+    return [
+        vx + w * t[0] + y * t[2] - z * t[1],
+        vy + w * t[1] + z * t[0] - x * t[2],
+        vz + w * t[2] + x * t[1] - y * t[0]
+    ]
+
+
+class FBXParser:
+    """Parser for FBX ASCII files with detailed logging."""
+    
+    FBX_TIME_UNIT = 46186158000  # FBX ticks per second
+    
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.models = {}
+        self.connections = []
+        self.model_names = {}
+        self.anim_curves = {}
+        self.anim_curve_nodes = {}
+        self.curve_to_node = {}
+        self.node_to_model = {}
+        self.frame_count = 2
+        self.fps = 30
+        self.frame_offset = 0  # Offset to normalize frame range to start at 0
+        self.original_start_frame = 0  # Original start frame from Maya
+        self.parse_errors = []
+        self.parse_warnings = []
+    
+    def parse(self):
+        """Parse the FBX file with detailed logging."""
+        log_message("  Parsing FBX file...")
+        
+        with open(self.filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        log_message("    File size: %d bytes" % len(content))
+        
+        # Parse Models (bones/joints)
+        self._parse_models(content)
+        log_message("    Found %d models (bones)" % len(self.models))
+        
+        # Parse Connections (hierarchy)
+        self._parse_connections(content)
+        log_message("    Found %d connections" % len(self.connections))
+        
+        # Parse Animation data
+        self._parse_animation_curves(content)
+        log_message("    Found %d animation curves" % len(self.anim_curves))
+        
+        self._parse_animation_connections(content)
+        log_message("    Found %d curve-to-node mappings" % len(self.curve_to_node))
+        log_message("    Found %d node-to-model mappings" % len(self.node_to_model))
+        
+        # Log frame range info
+        if self.frame_offset > 0:
+            log_message("    Original frame range: %d-%d (offset by %d to start at 0)" % 
+                       (self.original_start_frame, self.original_start_frame + self.frame_count - 1, self.frame_offset))
+        log_message("    Animation: %d frames at %d fps" % (self.frame_count, self.fps))
+        
+        # Log animated bones
+        animated_bones = set()
+        for curve_id, curve_data in self.anim_curves.items():
+            if curve_id in self.curve_to_node:
+                node_id = self.curve_to_node[curve_id]['node_id']
+                if node_id in self.node_to_model:
+                    bone_name = self.node_to_model[node_id]['bone_name']
+                    animated_bones.add(bone_name)
+        
+        log_message("    Bones with animation data: %d" % len(animated_bones))
+        if animated_bones:
+            for bone in sorted(animated_bones)[:10]:
+                log_message("      - %s" % bone)
+            if len(animated_bones) > 10:
+                log_message("      ... and %d more" % (len(animated_bones) - 10))
+        
+        # Verbose: Log ALL bones found
+        if is_verbose():
+            log_verbose("=" * 60)
+            log_verbose("ALL BONES FOUND IN FBX (%d total):" % len(self.models))
+            log_verbose("=" * 60)
+            for model_id, model in sorted(self.models.items(), key=lambda x: x[1]['name']):
+                trans = model['translation']
+                rot = model['rotation']
+                log_verbose("  %s" % model['name'])
+                log_verbose("    Translation: (%.4f, %.4f, %.4f)" % (trans[0], trans[1], trans[2]))
+                log_verbose("    Rotation: (%.4f, %.4f, %.4f)" % (rot[0], rot[1], rot[2]))
+            
+            log_verbose("")
+            log_verbose("=" * 60)
+            log_verbose("ANIMATION CURVES (%d total):" % len(self.anim_curves))
+            log_verbose("=" * 60)
+            for curve_id, curve_data in self.anim_curves.items():
+                keys = curve_data.get('keys', [])
+                if curve_id in self.curve_to_node:
+                    node_info = self.curve_to_node[curve_id]
+                    node_id = node_info['node_id']
+                    axis = node_info['axis']
+                    if node_id in self.node_to_model:
+                        bone_info = self.node_to_model[node_id]
+                        bone_name = bone_info['bone_name']
+                        transform_type = bone_info['type']
+                        log_verbose("  Curve %s -> %s.%s%s (%d keys)" % (curve_id, bone_name, transform_type, axis, len(keys)))
+                        if keys:
+                            first_val = keys[0][1]
+                            last_val = keys[-1][1]
+                            is_varying = any(abs(k[1] - first_val) > 0.001 for k in keys)
+                            log_verbose("    First: frame %d = %.4f, Last: frame %d = %.4f, Varying: %s" % 
+                                       (keys[0][0], first_val, keys[-1][0], last_val, is_varying))
+        
+        return True
+    
+    def _parse_models(self, content):
+        """Extract Model definitions (bones)."""
+        # Pattern: Model: ID, "Model::Name", "LimbNode"
+        model_pattern = r'Model:\s*(\d+),\s*"Model::([^"]+)",\s*"LimbNode"\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}'
+        
+        for match in re.finditer(model_pattern, content, re.MULTILINE | re.DOTALL):
+            model_id = match.group(1)
+            raw_name = match.group(2)
+            properties_block = match.group(3)
+            
+            model_name = decode_bone_name(raw_name)
+            self.model_names[model_id] = model_name
+            
+            model_data = {
+                'name': model_name,
+                'translation': [0.0, 0.0, 0.0],
+                'rotation': [0.0, 0.0, 0.0],
+                'scale': [1.0, 1.0, 1.0],
+                'pre_rotation': [0.0, 0.0, 0.0]
+            }
+            
+            # Parse Lcl Translation
+            trans_match = re.search(r'P:\s*"Lcl Translation"[^,]*,[^,]*,[^,]*,[^,]*,([^,]+),([^,]+),([^\n]+)', properties_block)
+            if trans_match:
+                try:
+                    model_data['translation'] = [
+                        float(trans_match.group(1)),
+                        float(trans_match.group(2)),
+                        float(trans_match.group(3).strip())
+                    ]
+                except ValueError:
+                    pass
+            
+            # Parse Lcl Rotation
+            rot_match = re.search(r'P:\s*"Lcl Rotation"[^,]*,[^,]*,[^,]*,[^,]*,([^,]+),([^,]+),([^\n]+)', properties_block)
+            if rot_match:
+                try:
+                    model_data['rotation'] = [
+                        float(rot_match.group(1)),
+                        float(rot_match.group(2)),
+                        float(rot_match.group(3).strip())
+                    ]
+                except ValueError:
+                    pass
+            
+            # Parse Lcl Scaling
+            scale_match = re.search(r'P:\s*"Lcl Scaling"[^,]*,[^,]*,[^,]*,[^,]*,([^,]+),([^,]+),([^\n]+)', properties_block)
+            if scale_match:
+                try:
+                    model_data['scale'] = [
+                        float(scale_match.group(1)),
+                        float(scale_match.group(2)),
+                        float(scale_match.group(3).strip())
+                    ]
+                except ValueError:
+                    pass
+            
+            # Parse PreRotation
+            prerot_match = re.search(r'P:\s*"PreRotation"[^,]*,[^,]*,[^,]*,[^,]*,([^,]+),([^,]+),([^\n]+)', properties_block)
+            if prerot_match:
+                try:
+                    model_data['pre_rotation'] = [
+                        float(prerot_match.group(1)),
+                        float(prerot_match.group(2)),
+                        float(prerot_match.group(3).strip())
+                    ]
+                except ValueError:
+                    pass
+            
+            self.models[model_id] = model_data
+    
+    def _parse_connections(self, content):
+        """Extract parent-child connections."""
+        conn_match = re.search(r'Connections:\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}', content, re.DOTALL)
+        if not conn_match:
+            return
+        
+        conn_block = conn_match.group(1)
+        conn_pattern = r';Model::([^,]+),\s*Model::([^\n]+)\s*\n\s*C:\s*"OO",(\d+),(\d+)'
+        
+        for match in re.finditer(conn_pattern, conn_block):
+            child_name = match.group(1).strip()
+            parent_name = match.group(2).strip()
+            child_id = match.group(3)
+            parent_id = match.group(4)
+            self.connections.append((child_id, parent_id, child_name, parent_name))
+    
+    def _parse_animation_curves(self, content):
+        """Parse AnimationCurve objects to extract keyframe data.
+        
+        Handles exported frame ranges by normalizing to start at frame 0.
+        For example, if animation was exported from frame 50-100, it becomes 0-50.
+        """
+        curve_header_pattern = r'AnimationCurve:\s*(\d+),\s*"[^"]*",\s*""'
+        
+        # First pass: collect all raw frame data
+        raw_curves = {}
+        all_frames = []
+        
+        for header_match in re.finditer(curve_header_pattern, content):
+            curve_id = header_match.group(1)
+            start_pos = header_match.end()
+            search_region = content[start_pos:start_pos + 5000]
+            
+            time_match = re.search(r'KeyTime:\s*\*\d+\s*\{\s*a:\s*([^\}]+)\}', search_region)
+            value_match = re.search(r'KeyValueFloat:\s*\*\d+\s*\{\s*a:\s*([^\}]+)\}', search_region)
+            
+            if time_match and value_match:
+                times_str = time_match.group(1).strip()
+                values_str = value_match.group(1).strip()
+                
+                try:
+                    times = [int(t.strip()) for t in times_str.split(',') if t.strip()]
+                    values = [float(v.strip()) for v in values_str.split(',') if v.strip()]
+                    
+                    keys = []
+                    for t, v in zip(times, values):
+                        frame = int(round((t / self.FBX_TIME_UNIT) * self.fps))
+                        keys.append((frame, v))
+                        all_frames.append(frame)
+                    
+                    raw_curves[curve_id] = {'keys': keys}
+                except (ValueError, IndexError):
+                    pass
+        
+        # Find the minimum frame to use as offset (normalize to start at 0)
+        if all_frames:
+            min_frame = min(all_frames)
+            max_frame = max(all_frames)
+            self.original_start_frame = min_frame
+            self.frame_offset = min_frame
+            
+            # Apply offset to normalize frame range
+            for curve_id, curve_data in raw_curves.items():
+                normalized_keys = []
+                for frame, value in curve_data['keys']:
+                    normalized_frame = frame - min_frame
+                    normalized_keys.append((normalized_frame, value))
+                self.anim_curves[curve_id] = {'keys': normalized_keys}
+            
+            # Frame count is now based on normalized range
+            self.frame_count = max(2, max_frame - min_frame + 1)
+        else:
+            # No animation curves found
+            self.anim_curves = raw_curves
+    
+    def _parse_animation_connections(self, content):
+        """Parse connections between animation curves, curve nodes, and models."""
+        conn_match = re.search(r'Connections:\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}', content, re.DOTALL)
+        if not conn_match:
+            return
+        
+        conn_block = conn_match.group(1)
+        
+        # AnimCurveNode to Model connections
+        node_to_model_pattern = r';AnimCurveNode::([TRS]),\s*Model::([^\n]+)\s*\n\s*C:\s*"OP",(\d+),(\d+),\s*"Lcl\s*(Translation|Rotation|Scaling)"'
+        
+        for match in re.finditer(node_to_model_pattern, conn_block):
+            node_type = match.group(1)
+            raw_bone_name = match.group(2).strip()
+            node_id = match.group(3)
+            model_id = match.group(4)
+            
+            bone_name = decode_bone_name(raw_bone_name)
+            
+            self.node_to_model[node_id] = {
+                'model_id': model_id,
+                'bone_name': bone_name,
+                'type': node_type,
+            }
+        
+        # AnimCurve to AnimCurveNode connections
+        curve_to_node_pattern = r'C:\s*"OP",(\d+),(\d+),\s*"d\|([XYZ])"'
+        
+        for match in re.finditer(curve_to_node_pattern, conn_block):
+            curve_id = match.group(1)
+            node_id = match.group(2)
+            axis = match.group(3)
+            
+            self.curve_to_node[curve_id] = {
+                'node_id': node_id,
+                'axis': axis
+            }
+    
+    def get_bone_animation(self, bone_name, frame):
+        """Get animation values for a bone at a specific frame."""
+        result = {
+            'translation': [0.0, 0.0, 0.0],
+            'rotation': [0.0, 0.0, 0.0],
+            'scale': [1.0, 1.0, 1.0],
+            'is_animated': False
+        }
+        
+        for curve_id, curve_data in self.anim_curves.items():
+            if curve_id not in self.curve_to_node:
+                continue
+            
+            curve_conn = self.curve_to_node[curve_id]
+            node_id = curve_conn['node_id']
+            axis = curve_conn['axis']
+            
+            if node_id not in self.node_to_model:
+                continue
+            
+            node_data = self.node_to_model[node_id]
+            if node_data['bone_name'] != bone_name:
+                continue
+            
+            keys = curve_data['keys']
+            if keys:
+                first_val = keys[0][1]
+                is_varying = any(abs(k[1] - first_val) > 0.001 for k in keys)
+                if is_varying:
+                    result['is_animated'] = True
+            
+            value = self._sample_curve(keys, frame)
+            
+            axis_idx = {'X': 0, 'Y': 1, 'Z': 2}[axis]
+            if node_data['type'] == 'T':
+                result['translation'][axis_idx] = value
+            elif node_data['type'] == 'R':
+                result['rotation'][axis_idx] = value
+            elif node_data['type'] == 'S':
+                result['scale'][axis_idx] = value
+        
+        return result
+    
+    def _sample_curve(self, keys, frame):
+        """Sample animation curve at a specific frame."""
+        if not keys:
+            return 0.0
+        
+        prev_key = keys[0]
+        next_key = keys[-1]
+        
+        for f, v in keys:
+            if f == frame:
+                return v
+            if f < frame:
+                prev_key = (f, v)
+            if f > frame:
+                next_key = (f, v)
+                break
+        
+        if frame <= prev_key[0]:
+            return prev_key[1]
+        if frame >= next_key[0]:
+            return next_key[1]
+        
+        t = (frame - prev_key[0]) / (next_key[0] - prev_key[0])
+        return prev_key[1] + t * (next_key[1] - prev_key[1])
+    
+    def has_animation(self):
+        """Check if any animation data was found."""
+        return len(self.anim_curves) > 0 and self.frame_count > 2
+    
+    def build_hierarchy(self):
+        """Build the bone hierarchy."""
+        children_of = {}
+        parent_of = {}
+        
+        for child_id, parent_id, child_name, parent_name in self.connections:
+            if child_id in self.models:
+                if parent_id not in children_of:
+                    children_of[parent_id] = []
+                children_of[parent_id].append(child_id)
+                parent_of[child_id] = parent_id
+        
+        root_ids = []
+        for model_id in self.models:
+            parent_id = parent_of.get(model_id)
+            if parent_id is None or parent_id not in self.models:
+                root_ids.append(model_id)
+        
+        def build_tree(model_id):
+            model = self.models[model_id]
+            children = children_of.get(model_id, [])
+            return {
+                'id': model_id,
+                'name': model['name'],
+                'translation': model['translation'],
+                'rotation': model['rotation'],
+                'scale': model['scale'],
+                'pre_rotation': model['pre_rotation'],
+                'children': [build_tree(cid) for cid in children if cid in self.models]
+            }
+        
+        return [build_tree(rid) for rid in root_ids]
+
+
+def compute_world_transforms_for_frame(hierarchy, frame, parser, bind_transforms):
+    """
+    Compute world transforms for all bones at a given animation frame.
+    Handles IK chains correctly by propagating parent rotations to children.
+    
+    This is critical for proper animation - when a parent bone rotates, 
+    child bone world positions must update accordingly.
+    
+    Args:
+        hierarchy: Bone hierarchy from FBXParser
+        frame: Frame number
+        parser: FBXParser with animation data
+        bind_transforms: Dict of bone_name -> (bind_pos, bind_quat) tuples
+        
+    Returns:
+        dict: bone_name -> (world_pos, world_quat) for this frame
+    """
+    frame_transforms = {}
+    
+    def compute_bone(bone_data, parent_world_trans, parent_world_rot):
+        bone_name = bone_data['name']
+        
+        # Get bind pose info
+        bind_pos, bind_quat = bind_transforms.get(bone_name, ([0,0,0], (1,0,0,0)))
+        local_trans = bone_data['translation']
+        
+        # Check if this bone has animation
+        anim_data = parser.get_bone_animation(bone_name, frame)
+        
+        if anim_data['is_animated']:
+            # Use animated local rotation
+            local_quat = euler_to_quaternion(
+                anim_data['rotation'][0],
+                anim_data['rotation'][1],
+                anim_data['rotation'][2]
+            )
+        else:
+            # Use bind pose local rotation
+            bind_rot = bone_data['rotation']
+            local_quat = euler_to_quaternion(bind_rot[0], bind_rot[1], bind_rot[2])
+        
+        # Compute world transform
+        if parent_world_trans is not None:
+            # Rotate local translation by parent's world rotation
+            rotated_trans = rotate_vector_by_quat(local_trans, parent_world_rot)
+            
+            world_trans = [
+                parent_world_trans[0] + rotated_trans[0],
+                parent_world_trans[1] + rotated_trans[1],
+                parent_world_trans[2] + rotated_trans[2]
+            ]
+            
+            # Combine rotations: world = parent_rot * local_rot
+            world_quat = multiply_quaternions(parent_world_rot, local_quat)
+        else:
+            # Root bone
+            world_trans = [0.0, 0.0, 0.0]
+            world_quat = (1.0, 0.0, 0.0, 0.0)
+        
+        frame_transforms[bone_name] = (world_trans, world_quat)
+        
+        # Recurse to children
+        for child in bone_data.get('children', []):
+            compute_bone(child, world_trans, world_quat)
+    
+    # Process all root bones
+    for bone in hierarchy:
+        compute_bone(bone, None, None)
+    
+    return frame_transforms
+
+
+def generate_hkx_xml(hierarchy, parser, validate=True):
+    """
+    Generate blender-hkx XML format from bone hierarchy.
+    
+    Uses hierarchical world transform computation to properly handle IK chains -
+    when a parent bone rotates, child bone positions update accordingly.
+    
+    Returns (xml_content, validation_info) tuple.
+    """
+    has_anim = parser.has_animation()
+    num_frames = parser.frame_count if has_anim else 2
+    fps = parser.fps
+    
+    log_message("  Generating XML with %d frames at %d fps" % (num_frames, fps))
+    
+    root = ET.Element('blender-hkx', version='1')
+    
+    # Metadata
+    ET.SubElement(root, 'int', name='frames').text = str(num_frames)
+    ET.SubElement(root, 'int', name='frameRate').text = str(fps)
+    ET.SubElement(root, 'bool', name='additive').text = 'false'
+    
+    # Skeleton
+    skeleton_elem = ET.SubElement(root, 'skeleton', name='0')
+    ET.SubElement(skeleton_elem, 'string', name='referenceFrame').text = 'OBJECT'
+    
+    all_bones = []
+    bone_transforms = {}
+    
+    def add_bone(parent_elem, bone_data, parent_world_trans=None, parent_world_rot=None, is_root=False):
+        """Add bone and its children to XML with world-space transforms."""
+        bone_elem = ET.SubElement(parent_elem, 'bone', name=bone_data['name'])
+        
+        local_trans = bone_data['translation']
+        rot = bone_data['rotation']
+        
+        if is_root:
+            # Root bones at origin with identity rotation
+            world_trans = [0.0, 0.0, 0.0]
+            world_quat = (1.0, 0.0, 0.0, 0.0)
+        else:
+            local_quat = euler_to_quaternion(rot[0], rot[1], rot[2])
+            
+            if parent_world_trans is not None and parent_world_rot is not None:
+                rotated_trans = rotate_vector_by_quat(local_trans, parent_world_rot)
+                world_trans = [
+                    parent_world_trans[0] + rotated_trans[0],
+                    parent_world_trans[1] + rotated_trans[1],
+                    parent_world_trans[2] + rotated_trans[2]
+                ]
+                world_quat = multiply_quaternions(parent_world_rot, local_quat)
+            else:
+                world_trans = local_trans
+                world_quat = local_quat
+        
+        transform_text = "%s %s %s %s %s %s %s 1 1 1" % (
+            world_trans[0], world_trans[1], world_trans[2],
+            world_quat[0], world_quat[1], world_quat[2], world_quat[3]
+        )
+        
+        ET.SubElement(bone_elem, 'transform', name='ref').text = transform_text
+        all_bones.append(bone_data['name'])
+        bone_transforms[bone_data['name']] = (world_trans, world_quat)
+        
+        for child in bone_data.get('children', []):
+            add_bone(bone_elem, child, world_trans, world_quat, is_root=False)
+    
+    for bone in hierarchy:
+        add_bone(skeleton_elem, bone, None, None, is_root=True)
+    
+    log_message("    Added %d bones to skeleton" % len(all_bones))
+    
+    # Verbose: Log bind pose transforms for all bones
+    if is_verbose():
+        log_verbose("")
+        log_verbose("=" * 60)
+        log_verbose("SKELETON BIND POSE TRANSFORMS:")
+        log_verbose("=" * 60)
+        for bone_name in all_bones:
+            pos, quat = bone_transforms[bone_name]
+            log_verbose("  %s:" % bone_name)
+            log_verbose("    Position: (%.4f, %.4f, %.4f)" % (pos[0], pos[1], pos[2]))
+            log_verbose("    Quaternion: (%.4f, %.4f, %.4f, %.4f)" % (quat[0], quat[1], quat[2], quat[3]))
+    
+    # Animation
+    anim_elem = ET.SubElement(root, 'animation', name='0')
+    
+    # Find animation skeleton root
+    anim_skeleton_root = 'NPC Root [Root]'
+    if hierarchy:
+        for child in hierarchy[0].get('children', []):
+            if 'Root' in child['name']:
+                anim_skeleton_root = child['name']
+                break
+    
+    ET.SubElement(anim_elem, 'string', name='skeleton').text = anim_skeleton_root
+    ET.SubElement(anim_elem, 'string', name='referenceFrame').text = 'BONE'
+    
+    # NPC and CharacterBumper are virtual roots, not animation tracks
+    excluded_bones = {'NPC', 'CharacterBumper'}
+    
+    # Build bind transforms dict for hierarchical animation computation
+    bind_transforms_dict = {}
+    for bone_name in all_bones:
+        bind_pos, bind_quat = bone_transforms.get(bone_name, ([0,0,0], (1,0,0,0)))
+        bind_transforms_dict[bone_name] = (bind_pos, bind_quat)
+    
+    # Pre-compute world transforms for ALL frames if we have animation
+    # This handles IK chains correctly by propagating parent rotations to children
+    frame_world_transforms = {}
+    if has_anim:
+        log_message("    Computing hierarchical world transforms for animation...")
+        for frame in range(num_frames):
+            frame_world_transforms[frame] = compute_world_transforms_for_frame(
+                hierarchy, frame, parser, bind_transforms_dict
+            )
+    
+    # Track animation statistics
+    animated_bone_count = 0
+    total_keyframes = 0
+    verbose_animated_bones = []  # For verbose logging
+    
+    if is_verbose():
+        log_verbose("")
+        log_verbose("=" * 60)
+        log_verbose("GENERATING ANIMATION TRACKS:")
+        log_verbose("=" * 60)
+    
+    # Add transform tracks for each bone
+    for bone_name in all_bones:
+        if bone_name in excluded_bones:
+            if is_verbose():
+                log_verbose("  Skipping excluded bone: %s" % bone_name)
+            continue
+        
+        track_elem = ET.SubElement(anim_elem, 'track', name=bone_name, type='transform')
+        
+        # Get bind pose
+        bind_transform_str = "%s %s %s %s %s %s %s 1 1 1" % (
+            bone_transforms[bone_name][0][0], bone_transforms[bone_name][0][1], bone_transforms[bone_name][0][2],
+            bone_transforms[bone_name][1][0], bone_transforms[bone_name][1][1], 
+            bone_transforms[bone_name][1][2], bone_transforms[bone_name][1][3]
+        )
+        
+        bone_has_animation = False
+        bone_frame_samples = []  # For verbose logging
+        
+        for frame in range(num_frames):
+            if has_anim and frame in frame_world_transforms:
+                # Get the hierarchically-computed world transform for this frame
+                if bone_name in frame_world_transforms[frame]:
+                    world_pos, world_quat = frame_world_transforms[frame][bone_name]
+                    transform_text = "%s %s %s %s %s %s %s 1 1 1" % (
+                        world_pos[0], world_pos[1], world_pos[2],
+                        world_quat[0], world_quat[1], world_quat[2], world_quat[3]
+                    )
+                    
+                    # Check if this bone has animation by comparing to bind pose
+                    anim_data = parser.get_bone_animation(bone_name, frame)
+                    if anim_data['is_animated']:
+                        bone_has_animation = True
+                    
+                    # Collect sample frames for verbose logging
+                    if is_verbose() and frame in [0, num_frames//4, num_frames//2, 3*num_frames//4, num_frames-1]:
+                        bone_frame_samples.append((frame, world_pos, world_quat, anim_data))
+                else:
+                    # Bone not in computed transforms, use bind pose
+                    transform_text = bind_transform_str
+            else:
+                # No animation - use bind pose
+                transform_text = bind_transform_str
+            
+            ET.SubElement(track_elem, 'transform', name=str(frame)).text = transform_text
+            total_keyframes += 1
+        
+        if bone_has_animation:
+            animated_bone_count += 1
+            verbose_animated_bones.append((bone_name, bone_frame_samples))
+    
+    # Verbose: Log detailed animation data for animated bones
+    if is_verbose() and verbose_animated_bones:
+        log_verbose("")
+        log_verbose("=" * 60)
+        log_verbose("ANIMATED BONES DETAIL (%d bones):" % len(verbose_animated_bones))
+        log_verbose("=" * 60)
+        for bone_name, samples in verbose_animated_bones:
+            log_verbose("  %s:" % bone_name)
+            for frame, pos, quat, anim_data in samples:
+                log_verbose("    Frame %d:" % frame)
+                log_verbose("      World Pos: (%.4f, %.4f, %.4f)" % (pos[0], pos[1], pos[2]))
+                log_verbose("      World Quat: (%.4f, %.4f, %.4f, %.4f)" % (quat[0], quat[1], quat[2], quat[3]))
+                log_verbose("      Local Rot (from FBX): (%.4f, %.4f, %.4f)" % tuple(anim_data['rotation']))
+    
+    log_message("    Animation tracks: %d bones with animation" % animated_bone_count)
+    log_message("    Total keyframes: %d" % total_keyframes)
+    
+    # Validation info
+    validation = {
+        'bone_count': len(all_bones),
+        'animated_bones': animated_bone_count,
+        'frame_count': num_frames,
+        'total_keyframes': total_keyframes,
+        'warnings': []
+    }
+    
+    if animated_bone_count == 0:
+        validation['warnings'].append("WARNING: No bones have animation data!")
+    elif animated_bone_count < 5:
+        validation['warnings'].append("WARNING: Only %d bones are animated (expected more)" % animated_bone_count)
+    
+    expected_keyframes = animated_bone_count * num_frames
+    if animated_bone_count > 0 and total_keyframes < expected_keyframes * 0.5:
+        validation['warnings'].append("WARNING: Fewer keyframes than expected")
+    
+    # Pretty print
+    rough_string = ET.tostring(root, encoding='unicode')
+    reparsed = minidom.parseString(rough_string)
+    xml_content = reparsed.toprettyxml(indent="\t")
+    
+    return xml_content, validation
+
+
+def find_system_python():
+    """Find system Python executable (not Maya's embedded Python)"""
+    log_message("=" * 60)
+    log_message("SEARCHING FOR SYSTEM PYTHON")
+    log_message("=" * 60)
+    
+    # Try common Python executable names
+    python_names = ['python', 'python3', 'python.exe', 'python3.exe']
+    
+    for name in python_names:
+        python_path = shutil.which(name)
+        log_message("  Checking '%s': %s" % (name, python_path if python_path else "NOT FOUND"))
+        if python_path:
+            # Make sure it's not Maya's Python
+            if 'maya' not in python_path.lower():
+                log_message("  → Found valid Python: %s" % python_path)
+                return python_path
+            else:
+                log_message("  → Skipping (Maya's Python)")
+    
+    # Fallback: try common installation paths on Windows
+    if sys.platform == 'win32':
+        log_message("  Checking common Windows paths...")
+        common_paths = [
+            os.path.expandvars(r'%LOCALAPPDATA%\Programs\Python\Python312\python.exe'),
+            os.path.expandvars(r'%LOCALAPPDATA%\Programs\Python\Python311\python.exe'),
+            os.path.expandvars(r'%LOCALAPPDATA%\Programs\Python\Python310\python.exe'),
+            os.path.expandvars(r'%LOCALAPPDATA%\Programs\Python\Python39\python.exe'),
+            r'C:\Python312\python.exe',
+            r'C:\Python311\python.exe',
+            r'C:\Python310\python.exe',
+            r'C:\Python39\python.exe',
+        ]
+        for path in common_paths:
+            exists = os.path.exists(path)
+            log_message("    %s: %s" % (path, "EXISTS" if exists else "not found"))
+            if exists:
+                return path
+    
+    # Last resort: just return 'python' and hope PATH is set
+    log_message("  WARNING: No Python found, using 'python' and hoping PATH is set")
+    return 'python'
+
+
+def debug_unpack_hkx(hkx_path, tool_path):
+    """Unpack HKX to XML for debugging purposes"""
+    try:
+        blender_hkx = os.path.join(tool_path, "blender-hkx.exe")
+        if not os.path.exists(blender_hkx):
+            log_message("    Cannot unpack: blender-hkx.exe not found")
+            return
+        
+        xml_debug_path = hkx_path.replace(".hkx", "_DEBUG.xml")
+        
+        cmd = [blender_hkx, "unpack", hkx_path, xml_debug_path]
+        log_message("    Unpacking command: %s" % " ".join(cmd))
+        
+        startupinfo = None
+        if sys.platform == 'win32':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            startupinfo=startupinfo,
+            timeout=30
+        )
+        
+        if result.returncode == 0 and os.path.exists(xml_debug_path):
+            # Read and log first part of XML
+            with open(xml_debug_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            log_message("    DEBUG XML created: %s" % xml_debug_path)
+            log_message("    XML size: %d bytes" % len(content))
+            
+            # Log summary
+            if '<animation' in content:
+                log_message("    Contains: Animation data")
+            else:
+                log_message("    WARNING: No animation data found in HKX!")
+            
+            if '<skeleton' in content:
+                log_message("    Contains: Skeleton data")
+            else:
+                log_message("    WARNING: No skeleton data found in HKX!")
+            
+            # Count tracks
+            track_count = content.count('<track')
+            log_message("    Track count: %d" % track_count)
+            
+            # Show first 2000 chars
+            log_message("    --- DEBUG XML PREVIEW (first 2000 chars) ---")
+            for line in content[:2000].split('\n'):
+                log_message("    " + line)
+            log_message("    --- END PREVIEW ---")
+        else:
+            log_message("    Failed to unpack HKX: %s" % (result.stderr or "unknown error"))
+    except Exception as e:
+        log_message("    Error unpacking HKX: %s" % str(e))
+
+
+def check_fbx_format(fbx_path):
+    """Check if FBX file is ASCII or Binary format"""
+    try:
+        with open(fbx_path, 'rb') as f:
+            header = f.read(20)
+        if header.startswith(b'Kaydara FBX Binary'):
+            return "BINARY"
+        elif header.startswith(b'; FBX') or b'FBX' in header:
+            return "ASCII"
+        else:
+            return "UNKNOWN"
+    except Exception as e:
+        return "ERROR: %s" % str(e)
+
+
+def postprocess_fbx_bone_names(fbx_path):
+    """
+    Post-process an FBX ASCII file to rename Maya-encoded bone names to proper Skyrim names.
+    Returns the path to the processed file (or original if no processing needed).
+    """
+    log_message("  Post-processing bone names in FBX...")
+    
+    try:
+        with open(fbx_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # Find all Model::* names in the FBX to see what bones exist
+        import re
+        model_names = re.findall(r'"Model::([^"]+)"', content)
+        unique_models = sorted(set(model_names))
+        
+        log_message("    Found %d unique models/bones in FBX:" % len(unique_models))
+        for name in unique_models[:20]:  # Show first 20
+            log_message("      - %s" % name)
+        if len(unique_models) > 20:
+            log_message("      ... and %d more" % (len(unique_models) - 20))
+        
+        original_content = content
+        replacements = 0
+        renamed_bones = []
+        
+        # Decode Maya-encoded names to match Skyrim bonelist format
+        # Maya encodes: space -> _s_, [ -> _ob_, ] -> _cb_
+        # Skyrim uses: NPC L Thigh [LThg] format
+        
+        import re
+        
+        # Find all bone/model names with Maya encoding
+        def decode_maya_name(encoded_name):
+            """Decode Maya's special character encoding"""
+            decoded = encoded_name
+            decoded = decoded.replace('_s_', ' ')
+            decoded = decoded.replace('_ob_', '[')
+            decoded = decoded.replace('_cb_', ']')
+            return decoded
+        
+        # Find and replace all encoded names
+        # Pattern matches strings that contain Maya encoding
+        pattern = r'"([^"]*_(?:s|ob|cb)_[^"]*)"'
+        
+        matches = re.findall(pattern, content)
+        unique_matches = set(matches)
+        
+        for encoded in unique_matches:
+            decoded = decode_maya_name(encoded)
+            if decoded != encoded:
+                content = content.replace('"' + encoded + '"', '"' + decoded + '"')
+                renamed_bones.append((encoded, decoded))
+                replacements += 1
+        
+        if replacements > 0:
+            # Write to a new file with _processed suffix
+            base, ext = os.path.splitext(fbx_path)
+            processed_path = base + "_havok" + ext
+            
+            with open(processed_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            log_message("    Renamed %d bone references:" % replacements)
+            for old, new in renamed_bones[:10]:
+                log_message("      %s -> %s" % (old, new))
+            if len(renamed_bones) > 10:
+                log_message("      ... and %d more" % (len(renamed_bones) - 10))
+            log_message("    Processed FBX: %s" % processed_path)
+            return processed_path
+        else:
+            log_message("    No bone names needed renaming")
+            log_message("    WARNING: This might indicate bone names don't match expected Skyrim names!")
+            return fbx_path
+            
+    except Exception as e:
+        log_message("  WARNING: Could not post-process FBX: %s" % str(e))
+        return fbx_path
+
+
+def convert_with_havok_tools(fbx_path, settings):
+    """
+    Convert FBX to HKX using Havok Content Tools pipeline.
+    
+    Pipeline:
+    1. Post-process FBX to rename bone names
+    2. FBXImporter.exe: FBX -> HKT
+    3. hctStandAloneFilterManager.exe: HKT -> HKX (using config file)
+    
+    Returns: (success, hkx_path or error_message)
+    """
+    tool_path = settings.get("hkxToolPath", "")
+    havok_path = settings.get("havokToolsPath", "")
+    target = settings.get("targetGame", "AMD64")
+    havok_skeleton = settings.get("havokSkeleton", "Default")
+    
+    # Get skeleton and bonelist files based on selection
+    skel_file = "skeleton.hkx"
+    bonelist_file = "bonelist.txt"
+    for display, skel, bonelist in HAVOK_SKELETON_OPTIONS:
+        if display == havok_skeleton:
+            skel_file = skel
+            bonelist_file = bonelist
+            break
+    
+    log_message("  Havok Skeleton: %s (%s, %s)" % (havok_skeleton, skel_file, bonelist_file))
+    
+    # Paths to required files
+    fbx_importer = os.path.join(tool_path, "FBXImporter.exe")
+    filter_manager = os.path.join(havok_path, "hctStandAloneFilterManager.exe")
+    config_file = os.path.join(tool_path, "example.config.hko")
+    skeleton_path = os.path.join(tool_path, skel_file)
+    bonelist_path = os.path.join(tool_path, bonelist_file)
+    
+    # Validate all required files exist
+    if not os.path.exists(fbx_importer):
+        return False, "FBXImporter.exe not found in tool path"
+    if not os.path.exists(filter_manager):
+        return False, "hctStandAloneFilterManager.exe not found in Havok path"
+    if not os.path.exists(config_file):
+        return False, "example.config.hko not found in tool path"
+    if not os.path.exists(skeleton_path):
+        return False, "%s not found in tool path" % skel_file
+    if not os.path.exists(bonelist_path):
+        return False, "%s not found in tool path" % bonelist_file
+    
+    base_name = os.path.splitext(fbx_path)[0]
+    hkx_path = base_name + ".hkx"
+    
+    # Working directory for the conversion
+    work_dir = os.path.dirname(fbx_path)
+    
+    try:
+        # Step 1: Post-process FBX to rename bone names
+        processed_fbx = postprocess_fbx_bone_names(fbx_path)
+        
+        # Step 2: FBXImporter.exe - Convert FBX to HKT
+        log_message("")
+        log_message("  [HAVOK STEP 1] Converting FBX to HKT...")
+        
+        hkt_path = os.path.splitext(processed_fbx)[0] + ".HKT"
+        
+        # -t=0 means export all takes/animations (not just the first one)
+        cmd_fbx = [fbx_importer, processed_fbx, "-t=0"]
+        log_message("    Command: %s" % " ".join('"%s"' % c if ' ' in c else c for c in cmd_fbx))
+        
+        startupinfo = None
+        if sys.platform == 'win32':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+        
+        result = subprocess.run(
+            cmd_fbx,
+            capture_output=True,
+            text=True,
+            cwd=work_dir,
+            startupinfo=startupinfo,
+            timeout=120
+        )
+        
+        log_message("    Return code: %d" % result.returncode)
+        if result.stdout and result.stdout.strip():
+            log_message("    STDOUT: %s" % result.stdout.strip()[:500])
+        if result.stderr and result.stderr.strip():
+            log_message("    STDERR: %s" % result.stderr.strip()[:500])
+        
+        # FBXImporter with -t=0 creates multiple files:
+        # - base.HKT (no animation, scene length 0)
+        # - base_Take_001.hkt (actual animation)
+        # We need to use the Take file if it exists
+        
+        base_name_hkt = os.path.splitext(processed_fbx)[0]
+        take_hkt_path = base_name_hkt + "_Take_001.hkt"
+        take_hkt_path_upper = base_name_hkt + "_Take_001.HKT"
+        
+        if os.path.exists(take_hkt_path):
+            hkt_path = take_hkt_path
+            log_message("    Using Take file: %s" % hkt_path)
+            # Remove the empty base HKT
+            base_hkt = base_name_hkt + ".HKT"
+            if os.path.exists(base_hkt):
+                try:
+                    os.remove(base_hkt)
+                except:
+                    pass
+        elif os.path.exists(take_hkt_path_upper):
+            hkt_path = take_hkt_path_upper
+            log_message("    Using Take file: %s" % hkt_path)
+            base_hkt = base_name_hkt + ".HKT"
+            if os.path.exists(base_hkt):
+                try:
+                    os.remove(base_hkt)
+                except:
+                    pass
+        elif not os.path.exists(hkt_path):
+            # Try uppercase extension for single-file export
+            hkt_path_upper = base_name_hkt + ".hkt"
+            if os.path.exists(hkt_path_upper):
+                hkt_path = hkt_path_upper
+            else:
+                return False, "HKT file not created by FBXImporter"
+        
+        log_message("    HKT created: %s" % hkt_path)
+        
+        # Step 3: hctStandAloneFilterManager.exe - Convert HKT to HKX
+        log_message("")
+        log_message("  [HAVOK STEP 2] Converting HKT to HKX...")
+        
+        # Always copy required files to work directory and create a config with correct paths
+        # The filter manager looks for bonelist.txt relative to the HKT file location
+        temp_config = None
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config_content = f.read()
+            
+            # Replace bonelist.txt reference with the correct bonelist filename
+            if bonelist_file != "bonelist.txt":
+                log_message("    Using bonelist: %s" % bonelist_file)
+                config_content = config_content.replace(
+                    '<hkparam name="rigFile">bonelist.txt</hkparam>',
+                    '<hkparam name="rigFile">%s</hkparam>' % bonelist_file
+                )
+            
+            # Use identity matrix - the Blender matrix was for Z-up conversion we don't need
+            blender_matrix = '(0.000000 -1.000000 0.000000 0.000000)(0.000000 0.000000 1.000000 0.000000)(-1.000000 0.000000 0.000000 0.000000)(0.000000 0.000000 0.000000 1.000000)'
+            identity_matrix = '(1.000000 0.000000 0.000000 0.000000)(0.000000 1.000000 0.000000 0.000000)(0.000000 0.000000 1.000000 0.000000)(0.000000 0.000000 0.000000 1.000000)'
+            
+            if blender_matrix in config_content:
+                config_content = config_content.replace(blender_matrix, identity_matrix)
+                log_message("    Transform matrix: identity")
+            
+            # CRITICAL: Replace Blender's rigNodes (which uses .L/.R suffix) with Skyrim format (L/R prefix)
+            # The config was made for Blender's naming convention, not Skyrim's actual bone names
+            blender_rig_nodes = 'NPC Thigh [Thg].L;NPC Calf [Clf].L;NPC Foot [ft ].L;NPC Thigh [Thg].R;NPC Calf [Clf].R;NPC Foot [ft ].R;SkirtRBone01;SkirtRBone02;SkirtRBone03;SkirtLBone01;SkirtLBone02;SkirtLBone03;SkirtBBone01;SkirtBBone02;SkirtBBone03;SkirtFBone01;SkirtFBone02;SkirtFBone03;NPC Spine [Spn0];NPC Spine1 [Spn1];NPC Spine2 [Spn2];NPC Clavicle [Clv].L;NPC UpperArm [Uar].L;NPC Forearm [Lar].L;NPC Clavicle [Clv].R;NPC UpperArm [Uar].R;NPC Forearm [Lar].R;AnimObjectA;AnimObjectB;NPC Neck [Neck];NPC Head [Head];NPCEyeBone;NPC Hand [Hnd].L;NPC Hand [Hnd].R;AnimObjectL;AnimObjectR;SHIELD;WEAPON;NPC L Pauldron;NPC R Pauldron;MagicEffectsNode;NPC MagicNode [Mag].L;NPC MagicNode [Mag].R;NPC Head MagicNode [Hmag];NPC Toe0 [Toe].L;NPC Toe0 [Toe].R;NPC ForearmTwist1 [Lt1].L;NPC ForearmTwist2 [Lt2].L;NPC UpperarmTwist1 [Ut1].L;NPC UpperarmTwist2 [Ut2].L;NPC ForearmTwist1 [Lt1].R;NPC ForearmTwist2 [Lt2].R;NPC UpperarmTwist1 [Ut1].R;NPC UpperarmTwist2 [Ut2].R;QUIVER;WeaponAxe;WeaponBack;WeaponBow;WeaponDagger;WeaponMace;WeaponSword;NPC Finger00 [F00].L;NPC Finger01 [F01].L;NPC Finger02 [F02].L;NPC Finger10 [F10].L;NPC Finger11 [F11].L;NPC Finger12 [F12].L;NPC Finger20 [F20].L;NPC Finger21 [F21].L;NPC Finger22 [F22].L;NPC Finger30 [F30].L;NPC Finger31 [F31].L;NPC Finger32 [F32].L;NPC Finger40 [F40].L;NPC Finger41 [F41].L;NPC Finger42 [F42].L;NPC Finger00 [F00].R;NPC Finger01 [F01].R;NPC Finger02 [F02].R;NPC Finger10 [F10].R;NPC Finger11 [F11].R;NPC Finger12 [F12].R;NPC Finger20 [F20].R;NPC Finger21 [F21].R;NPC Finger22 [F22].R;NPC Finger30 [F30].R;NPC Finger31 [F31].R;NPC Finger32 [F32].R;NPC Finger40 [F40].R;NPC Finger41 [F41].R;NPC Finger42 [F42].R;Camera3rd [Cam3];Camera Control;'
+            
+            # Skyrim format rigNodes (matches bonelist.txt)
+            skyrim_rig_nodes = 'NPC L Thigh [LThg];NPC L Calf [LClf];NPC L Foot [Lft ];NPC R Thigh [RThg];NPC R Calf [RClf];NPC R Foot [Rft ];x_SkirtRBone01;x_SkirtRBone02;x_SkirtRBone03;x_SkirtLBone01;x_SkirtLBone02;x_SkirtLBone03;x_SkirtBBone01;x_SkirtBBone02;x_SkirtBBone03;x_SkirtFBone01;x_SkirtFBone02;x_SkirtFBone03;NPC Spine [Spn0];NPC Spine1 [Spn1];NPC Spine2 [Spn2];NPC L Clavicle [LClv];NPC L UpperArm [LUar];NPC L Forearm [LLar];NPC R Clavicle [RClv];NPC R UpperArm [RUar];NPC R Forearm [RLar];AnimObjectA;AnimObjectB;NPC Neck [Neck];NPC Head [Head];NPCEyeBone;NPC L Hand [LHnd];NPC R Hand [RHnd];AnimObjectL;AnimObjectR;Shield;Weapon;NPC L Pauldron;NPC R Pauldron;MagicEffectsNode;NPC L MagicNode [LMag];NPC R MagicNode [RMag];NPC Head MagicNode [Hmag];NPC L Toe0 [LToe];NPC R Toe0 [RToe];NPC L ForearmTwist1 [LLt1];NPC L ForearmTwist2 [LLt2];NPC L UpperarmTwist1 [LUt1];NPC L UpperarmTwist2 [LUt2];NPC R ForearmTwist1 [RLt1];NPC R ForearmTwist2 [RLt2];NPC R UpperarmTwist1 [RUt1];NPC R UpperarmTwist2 [RUt2];Quiver;WeaponAxe;WeaponBack;WeaponBow;WeaponDagger;WeaponMace;WeaponSword;NPC L Finger00 [LF00];NPC L Finger01 [LF01];NPC L Finger02 [LF02];NPC L Finger10 [LF10];NPC L Finger11 [LF11];NPC L Finger12 [LF12];NPC L Finger20 [LF20];NPC L Finger21 [LF21];NPC L Finger22 [LF22];NPC L Finger30 [LF30];NPC L Finger31 [LF31];NPC L Finger32 [LF32];NPC L Finger40 [LF40];NPC L Finger41 [LF41];NPC L Finger42 [LF42];NPC R Finger00 [RF00];NPC R Finger01 [RF01];NPC R Finger02 [RF02];NPC R Finger10 [RF10];NPC R Finger11 [RF11];NPC R Finger12 [RF12];NPC R Finger20 [RF20];NPC R Finger21 [RF21];NPC R Finger22 [RF22];NPC R Finger30 [RF30];NPC R Finger31 [RF31];NPC R Finger32 [RF32];NPC R Finger40 [RF40];NPC R Finger41 [RF41];NPC R Finger42 [RF42];Camera3rd [Cam3];Camera Control;'
+            
+            if blender_rig_nodes in config_content:
+                config_content = config_content.replace(blender_rig_nodes, skyrim_rig_nodes)
+                log_message("    Updated rigNodes to Skyrim format")
+            else:
+                log_message("    WARNING: Could not find Blender rigNodes in config (partial match attempted)")
+            
+            # Create temp config in work directory
+            temp_config = os.path.join(work_dir, "_temp_config.hko")
+            with open(temp_config, 'w', encoding='utf-8') as f:
+                f.write(config_content)
+            
+            # Copy the bonelist file to the work directory (filter manager needs it there)
+            work_bonelist = os.path.join(work_dir, bonelist_file)
+            if not os.path.exists(work_bonelist):
+                shutil.copy(bonelist_path, work_bonelist)
+                log_message("    Copied %s to work directory" % bonelist_file)
+            
+            use_config = temp_config
+            log_message("    Config file ready: %s" % temp_config)
+        except Exception as e:
+            log_message("    WARNING: Could not prepare config: %s" % str(e))
+            log_message("    Using original config file")
+            use_config = config_file
+        
+        # The config outputs to "example.hkx" which we'll rename
+        temp_hkx = os.path.join(work_dir, "example.hkx")
+        
+        cmd_havok = [
+            filter_manager,
+            hkt_path,
+            "-s", use_config,
+            "-p", "cd"  # Change to HKT directory
+        ]
+        log_message("    Command: %s" % " ".join('"%s"' % c if ' ' in c else c for c in cmd_havok))
+        
+        result = subprocess.run(
+            cmd_havok,
+            capture_output=True,
+            text=True,
+            cwd=work_dir,
+            startupinfo=startupinfo,
+            timeout=300
+        )
+        
+        log_message("    Return code: %d" % result.returncode)
+        if result.stdout and result.stdout.strip():
+            log_message("    STDOUT: %s" % result.stdout.strip()[:500])
+        if result.stderr and result.stderr.strip():
+            log_message("    STDERR: %s" % result.stderr.strip()[:500])
+        
+        # Rename example.hkx to the proper name
+        if os.path.exists(temp_hkx):
+            if os.path.exists(hkx_path):
+                os.remove(hkx_path)
+            os.rename(temp_hkx, hkx_path)
+            log_message("    HKX created: %s" % hkx_path)
+        else:
+            return False, "HKX file not created by Havok filter manager"
+        
+        # Clean up intermediate files
+        try:
+            os.remove(hkt_path)
+            if processed_fbx != fbx_path:
+                os.remove(processed_fbx)
+            if temp_config and os.path.exists(temp_config):
+                os.remove(temp_config)
+            # Clean up copied bonelist
+            temp_bonelist = os.path.join(work_dir, bonelist_file)
+            if os.path.exists(temp_bonelist):
+                os.remove(temp_bonelist)
+        except:
+            pass
+        
+        # Verify output
+        if os.path.exists(hkx_path):
+            hkx_size = os.path.getsize(hkx_path)
+            log_message("    HKX size: %.1f KB" % (hkx_size / 1024))
+            
+            # Debug: Unpack HKX to XML to see contents
+            if hkx_size < 5000:  # If suspiciously small, unpack for debugging
+                log_message("    WARNING: HKX file is very small - unpacking to XML for debugging...")
+                debug_unpack_hkx(hkx_path, tool_path)
+            
+            return True, hkx_path
+        else:
+            return False, "HKX file not found after conversion"
+            
+    except subprocess.TimeoutExpired:
+        return False, "Conversion timed out"
+    except Exception as e:
+        return False, str(e)
+
+
+def process_exported_files(fbx_paths):
+    """
+    Process exported FBX files - convert to HKX.
+    Called by the settings system after export completes.
+    
+    Returns: True if successful, False if errors occurred
+    """
+    log_message("")
+    log_message("=" * 70)
+    log_message("SKYRIM HKX CONVERSION - STARTING")
+    log_message("=" * 70)
+    
+    # Check verbose logging status
+    verbose_mode = is_verbose()
+    if verbose_mode:
+        log_message("*** VERBOSE LOGGING ENABLED ***")
+        log_message("    Detailed bone and animation data will be logged below.")
+        log_message("=" * 70)
+    
+    if not fbx_paths:
+        log_message("No FBX files to convert")
+        return True
+    
+    log_message("Files to convert: %d" % len(fbx_paths))
+    for i, path in enumerate(fbx_paths):
+        log_message("  %d. %s" % (i+1, path))
+    
+    # Load settings
+    log_message("")
+    log_message("-" * 40)
+    log_message("LOADING SETTINGS")
+    log_message("-" * 40)
+    
+    settings = load_settings()
+    tool_path = settings.get("hkxToolPath", "")
+    skeleton = settings.get("skeleton", "Skeleton.hkx")
+    target = settings.get("targetGame", "AMD64")
+    keep_xml = settings.get("keepXml", False)
+    use_havok = settings.get("useHavokTools", False)
+    havok_path = settings.get("havokToolsPath", "")
+    
+    log_message("  Tool Path: %s" % (tool_path if tool_path else "<NOT SET>"))
+    log_message("  Skeleton: %s" % skeleton)
+    log_message("  Target Format: %s" % target)
+    log_message("  Keep XML: %s" % keep_xml)
+    log_message("  Use Havok Tools: %s" % use_havok)
+    if use_havok:
+        log_message("  Havok Path: %s" % (havok_path if havok_path else "<NOT SET>"))
+    
+    # Validate tool path
+    log_message("")
+    log_message("-" * 40)
+    log_message("VALIDATING PATHS")
+    log_message("-" * 40)
+    
+    if not tool_path:
+        log_message("ERROR: HKX Tool Path is not set!")
+        log_message("Please go to SETTINGS and set the HKX Conversion Tool path.")
+        cmds.warning("Skyrim HKX conversion skipped: Tool path not set")
+        return False
+    
+    log_message("  Tool path exists: %s" % os.path.isdir(tool_path))
+    
+    # ============================================
+    # ALTERNATIVE METHOD: Havok Content Tools
+    # ============================================
+    if use_havok:
+        log_message("")
+        log_message("=" * 50)
+        log_message("USING ALTERNATIVE METHOD: HAVOK CONTENT TOOLS")
+        log_message("=" * 50)
+        
+        # Validate Havok tools
+        if not havok_path:
+            log_message("ERROR: Havok Content Tools path is not set!")
+            cmds.warning("Skyrim HKX conversion skipped: Havok path not set")
+            return False
+        
+        fbx_importer = os.path.join(tool_path, "FBXImporter.exe")
+        filter_manager = os.path.join(havok_path, "hctStandAloneFilterManager.exe")
+        config_file = os.path.join(tool_path, "example.config.hko")
+        
+        missing = []
+        if not os.path.exists(fbx_importer):
+            missing.append("FBXImporter.exe in tool folder")
+        if not os.path.exists(filter_manager):
+            missing.append("hctStandAloneFilterManager.exe in Havok folder")
+        if not os.path.exists(config_file):
+            missing.append("example.config.hko in tool folder")
+        
+        if missing:
+            log_message("ERROR: Missing required files for Havok method:")
+            for m in missing:
+                log_message("  - %s" % m)
+            cmds.warning("Skyrim HKX conversion failed: Missing Havok files")
+            return False
+        
+        log_message("  All Havok tools found.")
+        
+        # Process each FBX with Havok method
+        successful = []
+        failed = []
+        
+        for i, fbx_path in enumerate(fbx_paths):
+            log_message("")
+            log_message("-" * 50)
+            log_message("Converting [%d/%d]: %s" % (i+1, len(fbx_paths), os.path.basename(fbx_path)))
+            log_message("-" * 50)
+            
+            success, result = convert_with_havok_tools(fbx_path, settings)
+            
+            if success:
+                successful.append(result)
+                log_message("  ✓ SUCCESS: %s" % result)
+            else:
+                failed.append((os.path.basename(fbx_path), result))
+                log_message("  ✗ FAILED: %s" % result)
+        
+        # Summary
+        log_message("")
+        log_message("=" * 50)
+        log_message("HAVOK CONVERSION COMPLETE")
+        log_message("=" * 50)
+        log_message("  Successful: %d" % len(successful))
+        log_message("  Failed: %d" % len(failed))
+        
+        if failed:
+            for name, error in failed:
+                log_message("    - %s: %s" % (name, error))
+        
+        return len(failed) == 0
+    
+    # ============================================
+    # DEFAULT METHOD: blender-hkx
+    # ============================================
+    blender_hkx = os.path.join(tool_path, "blender-hkx.exe")
+    log_message("  blender-hkx.exe: %s" % blender_hkx)
+    log_message("    Exists: %s" % os.path.exists(blender_hkx))
+    
+    skeleton_path = os.path.join(tool_path, skeleton)
+    log_message("  Skeleton file: %s" % skeleton_path)
+    log_message("    Exists: %s" % os.path.exists(skeleton_path))
+    
+    # Check for missing files
+    missing = []
+    if not os.path.isdir(tool_path):
+        missing.append("Tool folder: %s" % tool_path)
+    if not os.path.exists(blender_hkx):
+        missing.append("Packer: blender-hkx.exe")
+    if not os.path.exists(skeleton_path):
+        missing.append("Skeleton: %s" % skeleton)
+    
+    if missing:
+        log_message("")
+        log_message("ERROR: Missing required files:")
+        for m in missing:
+            log_message("  - %s" % m)
+        cmds.warning("Skyrim HKX conversion failed: Missing files - check Script Editor")
+        return False
+    
+    log_message("")
+    log_message("  All required files found. Using integrated FBX parser.")
+    
+    # Process each file
+    log_message("")
+    log_message("=" * 70)
+    log_message("CONVERTING FILES (INTEGRATED PARSER)")
+    log_message("=" * 70)
+    
+    successful = []
+    failed = []
+    
+    for idx, fbx_path in enumerate(fbx_paths):
+        log_message("")
+        log_message("-" * 50)
+        log_message("FILE %d/%d: %s" % (idx+1, len(fbx_paths), os.path.basename(fbx_path)))
+        log_message("-" * 50)
+        
+        try:
+            # Check input file
+            log_message("  Input FBX: %s" % fbx_path)
+            log_message("    Exists: %s" % os.path.exists(fbx_path))
+            
+            if not os.path.exists(fbx_path):
+                log_message("  ERROR: Input file not found!")
+                failed.append(os.path.basename(fbx_path))
+                continue
+            
+            file_size = os.path.getsize(fbx_path)
+            log_message("    Size: %.1f KB" % (file_size / 1024))
+            
+            # Check FBX format
+            fbx_format = check_fbx_format(fbx_path)
+            log_message("    Format: %s" % fbx_format)
+            
+            if fbx_format == "BINARY":
+                log_message("  ERROR: FBX is BINARY format!")
+                log_message("  The converter requires ASCII FBX format.")
+                log_message("  Please re-export with File Type set to 'ASCII' in the exporter settings.")
+                failed.append(os.path.basename(fbx_path))
+                continue
+            
+            # Output paths
+            base_name = os.path.splitext(fbx_path)[0]
+            hkx_path = base_name + ".hkx"
+            xml_path = base_name + "_temp.xml"
+            log_message("  Output HKX: %s" % hkx_path)
+            
+            # ============================================
+            # STEP 1: Parse FBX file
+            # ============================================
+            log_message("")
+            log_message("  [STEP 1] Parsing FBX file...")
+            
+            parser = FBXParser(fbx_path)
+            parser.parse()
+            
+            # Build hierarchy
+            hierarchy = parser.build_hierarchy()
+            log_message("    Built hierarchy with %d root bones" % len(hierarchy))
+            
+            if not hierarchy:
+                log_message("  ERROR: No bones found in FBX!")
+                failed.append(os.path.basename(fbx_path))
+                continue
+            
+            # Detailed animation check
+            log_message("")
+            log_message("  [ANIMATION ANALYSIS]")
+            log_message("    Total animation curves: %d" % len(parser.anim_curves))
+            log_message("    Curve-to-node mappings: %d" % len(parser.curve_to_node))
+            log_message("    Node-to-model mappings: %d" % len(parser.node_to_model))
+            
+            # Check which bones actually have animation
+            bones_with_varying_animation = []
+            for bone_name in [m['name'] for m in parser.models.values()]:
+                anim = parser.get_bone_animation(bone_name, 0)
+                if anim['is_animated']:
+                    bones_with_varying_animation.append(bone_name)
+            
+            log_message("    Bones with varying animation: %d" % len(bones_with_varying_animation))
+            if bones_with_varying_animation:
+                for bone in bones_with_varying_animation[:15]:
+                    # Get sample values
+                    anim0 = parser.get_bone_animation(bone, 0)
+                    anim_mid = parser.get_bone_animation(bone, parser.frame_count // 2)
+                    log_message("      - %s" % bone)
+                    log_message("        Frame 0: rot=(%.2f, %.2f, %.2f)" % tuple(anim0['rotation']))
+                    log_message("        Frame %d: rot=(%.2f, %.2f, %.2f)" % (parser.frame_count//2, anim_mid['rotation'][0], anim_mid['rotation'][1], anim_mid['rotation'][2]))
+                if len(bones_with_varying_animation) > 15:
+                    log_message("      ... and %d more" % (len(bones_with_varying_animation) - 15))
+            else:
+                log_message("    WARNING: No bones have varying animation values!")
+                log_message("    This might indicate the animation wasn't baked properly.")
+            
+            # ============================================
+            # STEP 2: Generate XML
+            # ============================================
+            log_message("")
+            log_message("  [STEP 2] Generating blender-hkx XML...")
+            
+            xml_content, validation = generate_hkx_xml(hierarchy, parser)
+            
+            # Show validation results
+            log_message("    Validation results:")
+            log_message("      Bones in skeleton: %d" % validation['bone_count'])
+            log_message("      Bones with animation: %d" % validation['animated_bones'])
+            log_message("      Frame count: %d" % validation['frame_count'])
+            log_message("      Total keyframes: %d" % validation['total_keyframes'])
+            
+            if validation['warnings']:
+                for warn in validation['warnings']:
+                    log_message("    %s" % warn)
+            
+            # Write XML
+            with open(xml_path, 'w', encoding='utf-8') as f:
+                f.write(xml_content)
+            
+            xml_size = os.path.getsize(xml_path)
+            log_message("    Written XML: %s (%.1f KB)" % (xml_path, xml_size/1024))
+            
+            # Sanity check XML size
+            if xml_size < 10000:  # Less than 10KB is suspicious
+                log_message("    WARNING: XML file is very small - animation may be missing!")
+            
+            # ============================================
+            # STEP 3: Pack to HKX using blender-hkx.exe
+            # ============================================
+            log_message("")
+            log_message("  [STEP 3] Packing XML to HKX...")
+            
+            cmd = [
+                blender_hkx,
+                'pack',
+                target,
+                xml_path,
+                hkx_path,
+                skeleton_path
+            ]
+            
+            log_message("    Command: %s" % " ".join('"%s"' % c if ' ' in c else c for c in cmd))
+            
+            startupinfo = None
+            if sys.platform == 'win32':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=tool_path,
+                startupinfo=startupinfo,
+                timeout=60
+            )
+            
+            log_message("    blender-hkx return code: %d" % result.returncode)
+            
+            if result.stdout and result.stdout.strip():
+                log_message("    STDOUT: %s" % result.stdout.strip())
+            if result.stderr and result.stderr.strip():
+                log_message("    STDERR: %s" % result.stderr.strip())
+            
+            # Clean up temp XML (unless keep_xml is enabled)
+            if keep_xml:
+                # Rename from _temp.xml to .xml for cleaner output
+                final_xml_path = base_name + ".xml"
+                try:
+                    if os.path.exists(final_xml_path):
+                        os.remove(final_xml_path)
+                    os.rename(xml_path, final_xml_path)
+                    log_message("    Kept XML file: %s" % final_xml_path)
+                except Exception as e:
+                    log_message("    Warning: Could not rename XML: %s" % str(e))
+            else:
+                try:
+                    os.remove(xml_path)
+                except:
+                    pass
+            
+            # Check result
+            if result.returncode == 0 and os.path.exists(hkx_path):
+                output_size = os.path.getsize(hkx_path)
+                log_message("")
+                log_message("  ✓ SUCCESS: Created %s" % os.path.basename(hkx_path))
+                log_message("    Output size: %.1f KB" % (output_size/1024))
+                
+                # Size sanity check
+                size_ratio = output_size / file_size if file_size > 0 else 0
+                log_message("    Size ratio (HKX/FBX): %.2f%%" % (size_ratio * 100))
+                
+                if output_size < 10000:  # Less than 10KB
+                    log_message("    WARNING: Output HKX is very small!")
+                    log_message("    The animation may not have converted properly.")
+                    log_message("    Expected size for a %d frame animation: ~50-200 KB" % parser.frame_count)
+                
+                successful.append(os.path.basename(fbx_path))
+            else:
+                log_message("")
+                log_message("  ✗ FAILED: blender-hkx packing failed")
+                if result.returncode != 0:
+                    log_message("    Return code: %d" % result.returncode)
+                if not os.path.exists(hkx_path):
+                    log_message("    Output file was not created")
+                failed.append(os.path.basename(fbx_path))
+                
+        except Exception as e:
+            import traceback
+            log_message("")
+            log_message("  ✗ FAILED: Exception occurred")
+            log_message("    %s" % str(e))
+            log_message("  --- TRACEBACK ---")
+            for line in traceback.format_exc().split('\n'):
+                if line.strip():
+                    log_message("    %s" % line)
+            failed.append(os.path.basename(fbx_path))
+    
+    # Summary
+    log_message("")
+    log_message("=" * 70)
+    log_message("CONVERSION SUMMARY")
+    log_message("=" * 70)
+    log_message("  Total files: %d" % len(fbx_paths))
+    log_message("  Successful: %d" % len(successful))
+    log_message("  Failed: %d" % len(failed))
+    
+    if successful:
+        log_message("  Successful files:")
+        for f in successful:
+            log_message("    ✓ %s" % f)
+    
+    if failed:
+        log_message("  Failed files:")
+        for f in failed:
+            log_message("    ✗ %s" % f)
+    
+    # Show results dialog
+    if PYSIDE_VERSION:
+        try:
+            from . import HaxExporterSettings as EPS
+            parent = EPS.maya_main_window()
+        except:
+            parent = None
+        
+        msg = "HKX Conversion Complete\n\n"
+        msg += "Successful: %d\n" % len(successful)
+        msg += "Failed: %d\n" % len(failed)
+        
+        if failed:
+            msg += "\nFailed files:\n• " + "\n• ".join(failed)
+        
+        QtWidgets.QMessageBox.information(parent, "Skyrim HKX Conversion", msg)
+    
+    log_message("Conversion complete: %d successful, %d failed" % (len(successful), len(failed)))
+    return len(failed) == 0
+
+
+# Register this export process with the settings system
+if PYSIDE_VERSION and HaxExporterSettings:
+    HaxExporterSettings.register_export_process(
+        PROCESS_ID,
+        PROCESS_NAME,
+        SkyrimSettingsWidget,
+        process_exported_files
+    )
+    log_message("Registered Skyrim export process")
