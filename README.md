@@ -5,7 +5,7 @@ A comprehensive toolkit designed specifically for STALKER 2 modding workflows in
 ## 📥 INSTALLATION
 
 ### Quick Installation (Recommended)
-1. **Download or clone** this repository to your computer
+1. **Download or clone** this repository to your computer (YOU MUST HAVE GIT LFS INSTALLED TO CLONE)
 2. **Drag** `Scripts/INSTALL_STALKER2_TOOLKIT.mel` into Maya's viewport
 3. **Follow** the on-screen prompts (including installing the Animation Exporter when prompted)
 4. **Access** the toolkit using the new "STALKER2" shelf button
