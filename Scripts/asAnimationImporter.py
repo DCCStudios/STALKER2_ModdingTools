@@ -56,6 +56,7 @@ GAMES = {
 
 # Frame range settings file
 FRAME_RANGE_FILE = "frame_range_settings.json"
+TUTORIAL_VIDEO_URL = "https://youtu.be/-LViUZwdu9Q"
 
 # Dark styling flag for toolkit integration
 USE_DARK_STYLE = False
@@ -213,6 +214,13 @@ class AnimationImporter(object):
             font="obliqueLabelFont",
             parent=instructions_column
         )
+        cmds.button(
+            label="Open STALKER 2 Animation Tutorial (YouTube)",
+            command=lambda x: self.open_tutorial_video(),
+            annotation=TUTORIAL_VIDEO_URL,
+            height=24,
+            parent=instructions_column
+        )
         cmds.separator(height=10, parent=instructions_column)
         
         # Frame Range Settings
@@ -230,9 +238,9 @@ class AnimationImporter(object):
         )
         
         frame_range_row = cmds.rowLayout(
-            numberOfColumns=4,
-            columnWidth4=(100, 80, 100, 80),
-            columnAttach4=("right", "left", "right", "left"),
+            numberOfColumns=5,
+            columnWidth5=(100, 80, 100, 80, 160),
+            columnAttach5=("right", "left", "right", "left", "left"),
             parent=frame_range_column
         )
         
@@ -250,6 +258,13 @@ class AnimationImporter(object):
             width=75,
             parent=frame_range_row,
             changeCommand=lambda x: self.save_frame_range_settings()
+        )
+
+        cmds.button(
+            label="Get Current Frame Range",
+            width=150,
+            command=lambda x: self.get_current_frame_range(),
+            parent=frame_range_row
         )
         
         cmds.setParent(frame_range_column)
@@ -535,6 +550,10 @@ class AnimationImporter(object):
         """Update the status text"""
         cmds.text(self.status_text, edit=True, label=message)
         cmds.refresh()
+
+    def open_tutorial_video(self):
+        """Open the STALKER 2 animation tutorial in the default browser."""
+        cmds.showHelp(TUTORIAL_VIDEO_URL, absolute=True)
         
     def get_frame_range_settings_path(self):
         """Get the path to the frame range settings file"""
@@ -579,6 +598,26 @@ class AnimationImporter(object):
             print(f"// Frame range settings saved: Start={self.saved_start_frame}, End={self.saved_end_frame}")
         except Exception as e:
             print(f"// Error saving frame range settings: {str(e)}")
+
+    def get_current_frame_range(self):
+        """Copy Maya's current playback range into the importer settings."""
+        try:
+            start_frame = int(cmds.playbackOptions(query=True, minTime=True))
+            end_frame = int(cmds.playbackOptions(query=True, maxTime=True))
+
+            cmds.intField(self.start_frame_field, edit=True, value=start_frame)
+            cmds.intField(self.end_frame_field, edit=True, value=end_frame)
+            self.save_frame_range_settings()
+
+            message = "Current frame range loaded: {} to {}".format(
+                start_frame, end_frame
+            )
+            self.update_status(message)
+            print("// {}".format(message))
+        except Exception as e:
+            message = "Error getting current frame range: {}".format(str(e))
+            self.update_status(message)
+            print("// {}".format(message))
     
     def load_frame_range_settings(self):
         """Load frame range settings from file"""
@@ -652,18 +691,38 @@ class AnimationImporter(object):
             align="left"
         )
         cmds.separator(height=10)
+
+        cmds.text(
+            label=("IMPORTANT: You MUST open MoCap Matcher using the "
+                   "'MoCap Matcher' button in the Animation Importer window."),
+            font="boldLabelFont",
+            align="left"
+        )
+        cmds.text(
+            label="Do NOT open MoCap Matcher directly from Advanced Skeleton 5.",
+            font="boldLabelFont",
+            align="left"
+        )
+        cmds.separator(height=10)
         
         # STALKER 2 steps
         cmds.text(label="1. Save the file as S2_Animation_Import.ma", align="left")
         cmds.text(label="2. Open S2_Rig_Final.ma", align="left")
         cmds.text(label="3. Hit the Create Reference button and select your animation maya file (S2_Animation_Import.ma)", align="left")
-        cmds.text(label="4. Open AdvancedSkeleton 5", align="left")
-        cmds.text(label="5. Open the MocapMatcher and load the Stalker2 preset", align="left")
+        cmds.text(label="4. MUST use this Animation Importer's MoCap Matcher button", align="left", font="boldLabelFont")
+        cmds.text(label="5. Confirm the STALKER2 preset loaded automatically", align="left")
         cmds.text(label="6. Detect the namespace for your imported animation", align="left")
         cmds.text(label="7. Set the rig to all FK Controls", align="left")
         cmds.text(label="8. Connect the Mocap Skeleton", align="left")
         cmds.text(label="9. Bake down the Mocap data", align="left")
         cmds.text(label="10. Hit the Cleanup button", align="left")
+        cmds.separator(height=10)
+        cmds.button(
+            label="Open STALKER 2 Animation Tutorial (YouTube)",
+            command=lambda x: self.open_tutorial_video(),
+            annotation=TUTORIAL_VIDEO_URL,
+            height=26
+        )
         
         # Set the parent back to the tab layout
         cmds.setParent('..')
@@ -790,8 +849,12 @@ class AnimationImporter(object):
             
             # Now try to open the MoCap Matcher
             mel.eval('asMoCapMatcherUI "asPicker"')
-            self.update_status("MoCap Matcher window opened.")
+            self.set_mocap_matcher_template("STALKER2")
+            self.patch_mocap_matcher_fk_button()
+            self.patch_mocap_matcher_connection_buttons()
+            self.update_status("MoCap Matcher opened (namespace-aware rig controls enabled).")
             print("// Opened Advanced Skeleton MoCap Matcher")
+            print("// Patched FK and MoCap connection buttons for namespaced rigs")
             
         except Exception as e:
             self.update_status("Error: Could not open MoCap Matcher - {}".format(str(e)))
@@ -799,6 +862,219 @@ class AnimationImporter(object):
             print("// Please ensure Advanced Skeleton is properly loaded:")
             print("//   1. Load Advanced Skeleton plugin/scripts")
             print("//   2. Try manually: asMoCapMatcherUI \"asPicker\"")
+
+    @staticmethod
+    def _advanced_skeleton_control_sets():
+        """Return body ControlSets for every Advanced Skeleton rig in the scene."""
+        return [
+            object_set for object_set in (cmds.ls(type="objectSet") or [])
+            if object_set.rsplit(":", 1)[-1] == "ControlSet"
+        ]
+
+    @staticmethod
+    def _namespace_from_node(node):
+        """Return a node's complete namespace, including a trailing colon."""
+        short_name = node.rsplit("|", 1)[-1]
+        namespace, separator, unused_name = short_name.rpartition(":")
+        return namespace + ":" if separator else ""
+
+    def _resolve_selected_rig_control_set(self):
+        """Resolve one rig ControlSet from selection or the MoCap Matcher UI."""
+        selection = cmds.ls(selection=True, long=True) or []
+        matches = set()
+
+        for node in selection:
+            expected_set = self._namespace_from_node(node) + "ControlSet"
+            if (cmds.objExists(expected_set)
+                    and cmds.nodeType(expected_set) == "objectSet"):
+                matches.add(expected_set)
+
+            # Set membership is stronger evidence than matching a namespace.
+            try:
+                containing_sets = cmds.listSets(object=node) or []
+            except RuntimeError:
+                containing_sets = []
+            for object_set in containing_sets:
+                if object_set.rsplit(":", 1)[-1] == "ControlSet":
+                    matches.add(object_set)
+
+        if len(matches) == 1:
+            return next(iter(matches))
+        if len(matches) > 1:
+            raise RuntimeError(
+                "Selected objects resolve to multiple rigs: {}".format(
+                    ", ".join(sorted(matches))
+                )
+            )
+
+        # Advanced Skeleton stores the destination rig namespace in this field.
+        namespace_field = "asMappingUINameSpacesTextFieldA1"
+        if cmds.textField(namespace_field, exists=True):
+            namespace = cmds.textField(namespace_field, query=True, text=True).strip()
+            if namespace and not namespace.endswith(":"):
+                namespace += ":"
+            ui_control_set = namespace + "ControlSet"
+            if (cmds.objExists(ui_control_set)
+                    and cmds.nodeType(ui_control_set) == "objectSet"):
+                return ui_control_set
+
+        control_sets = self._advanced_skeleton_control_sets()
+        if len(control_sets) == 1:
+            return control_sets[0]
+
+        if not selection:
+            raise RuntimeError(
+                "Select a control on the rig to set to FK; multiple rigs are available."
+            )
+        raise RuntimeError(
+            "Could not find an Advanced Skeleton ControlSet for the current selection."
+        )
+
+    def set_selected_rig_to_fk(self, *unused_args):
+        """Perform Advanced Skeleton's all-FK operation on the selected rig."""
+        control_set = self._resolve_selected_rig_control_set()
+        namespace = self._control_set_namespace(control_set)
+        changed_controls = 0
+
+        namespace_field = "asMappingUINameSpacesTextFieldA1"
+        if cmds.textField(namespace_field, exists=True):
+            cmds.textField(namespace_field, edit=True, text=namespace)
+
+        cmds.undoInfo(openChunk=True, chunkName="Set Advanced Skeleton Rig To FK")
+        try:
+            for control in (cmds.sets(control_set, query=True) or []):
+                if cmds.attributeQuery("FKIKBlend", node=control, exists=True):
+                    cmds.setAttr(control + ".FKIKBlend", 0)
+                    changed_controls += 1
+
+            hip_swinger = namespace + "HipSwinger_M"
+            if (cmds.objExists(hip_swinger)
+                    and cmds.attributeQuery(
+                        "stabilize", node=hip_swinger, exists=True
+                    )):
+                cmds.setAttr(hip_swinger + ".stabilize", 0)
+        finally:
+            cmds.undoInfo(closeChunk=True)
+
+        self.update_status(
+            "Set {} to FK ({} FK/IK controls changed).".format(
+                control_set, changed_controls
+            )
+        )
+        print("// Set {} to all FK".format(control_set))
+
+    @staticmethod
+    def _control_set_namespace(control_set):
+        """Return the complete namespace represented by an AS ControlSet."""
+        namespace, separator, unused_name = control_set.rpartition(":")
+        return namespace + ":" if separator else ""
+
+    def _update_mocap_matcher_rig_namespace(self):
+        """Set MoCap Matcher's destination namespace from the selected rig."""
+        control_set = self._resolve_selected_rig_control_set()
+        namespace = self._control_set_namespace(control_set)
+        namespace_field = "asMappingUINameSpacesTextFieldA1"
+
+        if not cmds.textField(namespace_field, exists=True):
+            raise RuntimeError("MoCap Matcher destination namespace field was not found.")
+
+        cmds.textField(namespace_field, edit=True, text=namespace)
+        return control_set
+
+    def set_mocap_matcher_template(self, template_name):
+        """Select and load a MoCap Matcher template through AS's own loader."""
+        import maya.mel as mel
+
+        template_menu = "asMappingUIFiles"
+        if not cmds.optionMenu(template_menu, exists=True):
+            raise RuntimeError("MoCap Matcher template menu was not found.")
+
+        cmds.optionMenu(template_menu, edit=True, value=template_name)
+        mel.eval('asMappingUIFileOptionMenuChanged "moCapMatcher"')
+
+        if template_name == "STALKER2":
+            extra_checkbox = "asMappingUIExtraCheckBox"
+            if not cmds.checkBox(extra_checkbox, exists=True):
+                raise RuntimeError("MoCap Matcher Extra checkbox was not found.")
+            cmds.checkBox(extra_checkbox, edit=True, value=True)
+
+        print("// MoCap Matcher template set to {}".format(template_name))
+
+    def connect_mocap_skeleton(self, *unused_args):
+        """Run AS MoCap Connect after refreshing the destination rig namespace."""
+        import maya.mel as mel
+
+        control_set = self._update_mocap_matcher_rig_namespace()
+        mel.eval('asMappingUIFunction "MoCapConnect"')
+        self.update_status("MoCap skeleton connected to {}.".format(control_set))
+
+    def disconnect_mocap_skeleton(self, *unused_args):
+        """Run Advanced Skeleton's original MoCap disconnect operation."""
+        import maya.mel as mel
+
+        mel.eval("asMoCapMatcherDisconnect")
+        self.update_status("MoCap skeleton disconnected.")
+
+    def patch_mocap_matcher_fk_button(self):
+        """Replace MoCap Matcher's cached, namespace-blind FK callback."""
+        patched_buttons = []
+        for control in (cmds.lsUI(controls=True, long=True) or []):
+            try:
+                if "asMappingUI" not in control:
+                    continue
+                if cmds.objectTypeUI(control) != "button":
+                    continue
+                if cmds.button(control, query=True, label=True) != "Set rig to all FK":
+                    continue
+                cmds.button(
+                    control,
+                    edit=True,
+                    command=self.set_selected_rig_to_fk
+                )
+                patched_buttons.append(control)
+            except RuntimeError:
+                # Ignore controls deleted while Maya is enumerating the UI.
+                continue
+
+        if not patched_buttons:
+            raise RuntimeError("Could not find the MoCap Matcher 'Set rig to all FK' button.")
+
+        return patched_buttons
+
+    def patch_mocap_matcher_connection_buttons(self):
+        """Patch MoCap Connect/Disconnect while preserving AS's implementation."""
+        callbacks = {
+            "Connect MoCap Skeleton": self.connect_mocap_skeleton,
+            "Disconnect MoCap Skeleton": self.disconnect_mocap_skeleton,
+        }
+        patched_labels = set()
+
+        for control in (cmds.lsUI(controls=True, long=True) or []):
+            try:
+                if "asMappingUI" not in control:
+                    continue
+                if cmds.objectTypeUI(control) != "button":
+                    continue
+
+                label = cmds.button(control, query=True, label=True)
+                if label not in callbacks:
+                    continue
+
+                cmds.button(control, edit=True, command=callbacks[label])
+                patched_labels.add(label)
+            except RuntimeError:
+                # Ignore controls deleted while Maya is enumerating the UI.
+                continue
+
+        missing_labels = sorted(set(callbacks) - patched_labels)
+        if missing_labels:
+            raise RuntimeError(
+                "Could not find MoCap Matcher button(s): {}".format(
+                    ", ".join(missing_labels)
+                )
+            )
+
+        return sorted(patched_labels)
     
     def anim_cleanup(self):
         """Perform post-MoCap matching cleanup operations"""

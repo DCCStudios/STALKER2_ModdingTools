@@ -3282,6 +3282,16 @@ def create_ui():
         cmds.window(WINDOW_NAME, title="Hax Game Exporter",
                     widthHeight=(700,1000), sizeable=True)
         cmds.columnLayout("mainColumn", adjustableColumn=True)
+
+        cmds.separator(height=6, style="none")
+        cmds.text(
+            label=("IMPORTANT: For STALKER 2, you MUST open MoCap Matcher using "
+                   "the Animation Importer's 'MoCap Matcher' button."),
+            align="center",
+            font="boldLabelFont",
+            height=32
+        )
+        cmds.separator(height=6, style="none")
         
         # Add 5px spacing after Preset line
         cmds.columnLayout(adjustableColumn=True, height=5)
