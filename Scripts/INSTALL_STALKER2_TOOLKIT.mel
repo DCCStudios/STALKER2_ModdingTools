@@ -6,10 +6,186 @@
 // 2. Copy files to Maya's scripts directory
 // 3. Set up Python paths
 // 4. Install the shelf button
-// 5. Show confirmation
+// 5. Install the bundled Advanced Skeleton matcher files
+// 6. Show confirmation
 
 // Define global variables
 global int $animExporterInstalled = 0;
+
+// Install the repository's custom Advanced Skeleton files without modifying
+// AdvancedSkeleton.mel or deleting any files from the user's installation.
+global proc int s2InstallAdvancedSkeletonFiles(string $scriptDir)
+{
+    string $repoRoot = dirname($scriptDir);
+    string $payloadSource = $repoRoot + "/AdvancedSkeleton";
+
+    // When the installer is not being run from the repository, ask the user
+    // to locate the payload folder (or the repository folder containing it).
+    if (!`filetest -d ($payloadSource + "/moCapMatchers")` ||
+        !`filetest -d ($payloadSource + "/nameMatchers")`) {
+        string $sourceSelection[] = `fileDialog2
+            -fileMode 3
+            -dialogStyle 2
+            -caption "Select STALKER2_ModdingTools/AdvancedSkeleton Folder"`;
+
+        if (!size($sourceSelection)) {
+            print("Advanced Skeleton file installation cancelled by user.\n");
+            return 0;
+        }
+
+        string $selectedSource = $sourceSelection[0];
+        if (`filetest -d ($selectedSource + "/moCapMatchers")` &&
+            `filetest -d ($selectedSource + "/nameMatchers")`) {
+            $payloadSource = $selectedSource;
+        } else if (`filetest -d ($selectedSource + "/AdvancedSkeleton/moCapMatchers")` &&
+                   `filetest -d ($selectedSource + "/AdvancedSkeleton/nameMatchers")`) {
+            $payloadSource = $selectedSource + "/AdvancedSkeleton";
+        } else {
+            confirmDialog
+                -title "STALKER 2 Toolkit - Advanced Skeleton Files"
+                -message ("The selected folder does not contain the required payload:\n\n" +
+                          "moCapMatchers\nnameMatchers\n\nSelected folder:\n" + $selectedSource)
+                -button "OK";
+            return 0;
+        }
+    }
+
+    print("Advanced Skeleton payload source: " + $payloadSource + "\n");
+
+    // Prefer Advanced Skeleton's own location helper when it is loaded.
+    string $advancedSkeletonRoot = "";
+    if (`exists asGetScriptLocation`) {
+        $advancedSkeletonRoot = `eval "asGetScriptLocation"`;
+    }
+
+    // If AS is available on Maya's script path but not currently open, whatIs
+    // can still locate the MEL file because the file and main proc share a name.
+    if ($advancedSkeletonRoot == "" ||
+        !`filetest -f ($advancedSkeletonRoot + "/AdvancedSkeleton.mel")`) {
+        string $asWhatIs = `whatIs "AdvancedSkeleton"`;
+        if (startsWith($asWhatIs, "Mel procedure found in: ")) {
+            string $asMelPath = substring($asWhatIs, 25, size($asWhatIs));
+            $advancedSkeletonRoot = dirname($asMelPath);
+        }
+    }
+
+    string $advancedSkeletonFilesDir = "";
+    if (`filetest -f ($advancedSkeletonRoot + "/AdvancedSkeleton.mel")` &&
+        `filetest -d ($advancedSkeletonRoot + "/AdvancedSkeletonFiles")`) {
+        $advancedSkeletonFilesDir = $advancedSkeletonRoot + "/AdvancedSkeletonFiles";
+    }
+
+    // If Maya cannot locate AS automatically, accept either the main
+    // AdvancedSkeleton folder or its AdvancedSkeletonFiles subfolder.
+    if ($advancedSkeletonFilesDir == "") {
+        string $targetSelection[] = `fileDialog2
+            -fileMode 3
+            -dialogStyle 2
+            -caption "Select Your Local Advanced Skeleton Install Folder"`;
+
+        if (!size($targetSelection)) {
+            print("Advanced Skeleton target selection cancelled by user.\n");
+            return 0;
+        }
+
+        string $selectedTarget = $targetSelection[0];
+        if (`filetest -f ($selectedTarget + "/AdvancedSkeleton.mel")` &&
+            `filetest -d ($selectedTarget + "/AdvancedSkeletonFiles")`) {
+            $advancedSkeletonRoot = $selectedTarget;
+            $advancedSkeletonFilesDir = $selectedTarget + "/AdvancedSkeletonFiles";
+        } else if (`filetest -d ($selectedTarget + "/moCapMatchers")` &&
+                   `filetest -d ($selectedTarget + "/nameMatchers")`) {
+            $advancedSkeletonFilesDir = $selectedTarget;
+            $advancedSkeletonRoot = dirname($selectedTarget);
+        } else if (`filetest -f ($selectedTarget + "/AdvancedSkeleton/AdvancedSkeleton.mel")` &&
+                   `filetest -d ($selectedTarget + "/AdvancedSkeleton/AdvancedSkeletonFiles")`) {
+            $advancedSkeletonRoot = $selectedTarget + "/AdvancedSkeleton";
+            $advancedSkeletonFilesDir = $advancedSkeletonRoot + "/AdvancedSkeletonFiles";
+        } else {
+            confirmDialog
+                -title "STALKER 2 Toolkit - Advanced Skeleton Files"
+                -message ("The selected folder is not a valid Advanced Skeleton installation.\n\n" +
+                          "Select the folder containing AdvancedSkeleton.mel and " +
+                          "AdvancedSkeletonFiles.\n\nSelected folder:\n" + $selectedTarget)
+                -button "OK";
+            return 0;
+        }
+    }
+
+    print("Advanced Skeleton install detected: " + $advancedSkeletonRoot + "\n");
+    print("Advanced Skeleton files target: " + $advancedSkeletonFilesDir + "\n");
+
+    // Build the collision list before changing anything.
+    python("import os, shutil");
+    python("s2_as_payload_source = os.path.normpath(r'" + $payloadSource + "')");
+    python("s2_as_files_target = os.path.normpath(r'" + $advancedSkeletonFilesDir + "')");
+    python("s2_as_payload_files = []\n" +
+           "for root, dirs, files in os.walk(s2_as_payload_source):\n" +
+           "    for filename in files:\n" +
+           "        source_file = os.path.join(root, filename)\n" +
+           "        relative_file = os.path.relpath(source_file, s2_as_payload_source)\n" +
+           "        s2_as_payload_files.append((source_file, relative_file))");
+    python("s2_as_existing_files = [relative_file for source_file, relative_file in s2_as_payload_files if os.path.exists(os.path.join(s2_as_files_target, relative_file))]");
+
+    int $existingCount = `python("len(s2_as_existing_files)")`;
+    int $overwriteExisting = 1;
+    if ($existingCount > 0) {
+        string $overwriteMessage = "Some STALKER 2 Advanced Skeleton files already exist.\n\n";
+        $overwriteMessage += "Existing files: " + $existingCount + "\n";
+        $overwriteMessage += "Target: " + $advancedSkeletonFilesDir + "\n\n";
+        $overwriteMessage += "Overwrite the existing files?\n\n";
+        $overwriteMessage += "Choosing No keeps existing files and copies only missing files.";
+
+        string $overwriteChoice = `confirmDialog
+            -title "STALKER 2 Toolkit - Advanced Skeleton Files"
+            -message $overwriteMessage
+            -button "Yes, Overwrite"
+            -button "No, Keep Existing"
+            -defaultButton "Yes, Overwrite"
+            -cancelButton "No, Keep Existing"
+            -dismissString "No, Keep Existing"`;
+
+        if ($overwriteChoice == "No, Keep Existing") {
+            $overwriteExisting = 0;
+        }
+    }
+
+    python("s2_as_overwrite_existing = " + $overwriteExisting);
+    python("s2_as_copy_success = True\n" +
+           "s2_as_copy_error = ''\n" +
+           "s2_as_copied_count = 0\n" +
+           "s2_as_skipped_count = 0\n" +
+           "try:\n" +
+           "    for source_file, relative_file in s2_as_payload_files:\n" +
+           "        target_file = os.path.join(s2_as_files_target, relative_file)\n" +
+           "        if os.path.exists(target_file) and not s2_as_overwrite_existing:\n" +
+           "            s2_as_skipped_count += 1\n" +
+           "            continue\n" +
+           "        target_dir = os.path.dirname(target_file)\n" +
+           "        if not os.path.exists(target_dir):\n" +
+           "            os.makedirs(target_dir)\n" +
+           "        shutil.copy2(source_file, target_file)\n" +
+           "        s2_as_copied_count += 1\n" +
+           "except Exception as e:\n" +
+           "    s2_as_copy_success = False\n" +
+           "    s2_as_copy_error = str(e)");
+
+    int $copySuccess = `python("s2_as_copy_success")`;
+    if (!$copySuccess) {
+        string $copyError = `python("s2_as_copy_error")`;
+        confirmDialog
+            -title "STALKER 2 Toolkit - Advanced Skeleton Copy Error"
+            -message ("Could not install the Advanced Skeleton files:\n\n" + $copyError)
+            -button "OK";
+        return 0;
+    }
+
+    int $copiedCount = `python("s2_as_copied_count")`;
+    int $skippedCount = `python("s2_as_skipped_count")`;
+    print("[OK] Advanced Skeleton payload processed: " + $copiedCount +
+          " copied, " + $skippedCount + " kept unchanged.\n");
+    return 1;
+}
 
 global proc install_stalker2_toolkit_drag_drop()
 {
@@ -196,6 +372,14 @@ global proc install_stalker2_toolkit_drag_drop()
     }
     
     print("Successfully copied STALKER 2 Toolkit to: " + $toolkitTarget + "\n");
+
+    // Install the repository's custom MoCap Matcher and Name Matcher files.
+    int $advancedSkeletonFilesInstalled = `s2InstallAdvancedSkeletonFiles $scriptDir`;
+    if ($advancedSkeletonFilesInstalled) {
+        print("[OK] STALKER 2 Advanced Skeleton files installed\n");
+    } else {
+        print("[INFO] Advanced Skeleton file installation was skipped or did not complete\n");
+    }
     
     // Copy custom icon if available
     string $iconImage = "pythonFamily.png";  // Default fallback
@@ -407,6 +591,11 @@ global proc install_stalker2_toolkit_drag_drop()
     // Show final success dialog with instructions
     string $finalMessage = "STALKER 2 Toolkit installed successfully!\n\n";
     $finalMessage += "FILES: Copied to " + $toolkitTarget + "\n\n";
+    if ($advancedSkeletonFilesInstalled) {
+        $finalMessage += "ADVANCED SKELETON: STALKER 2 matcher files installed\n\n";
+    } else {
+        $finalMessage += "ADVANCED SKELETON: Matcher file installation skipped or incomplete\n\n";
+    }
     
     if ($shelfOk) {
         $finalMessage += "USAGE: Click 'STALKER2' button on shelf";
@@ -463,4 +652,4 @@ global proc install_stalker2_toolkit_drag_drop()
 }
 
 // Run the installer when this script is sourced
-install_stalker2_toolkit_drag_drop; 
+install_stalker2_toolkit_drag_drop;
